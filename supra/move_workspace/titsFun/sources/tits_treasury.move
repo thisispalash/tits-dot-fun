@@ -14,6 +14,7 @@ module tits_fun::tits_treasury {
     total_fees_collected: u64,
     admin: address,
     created_at: u64,
+    reserve_coins: Coin<SupraCoin>,
   }
   
   #[event]
@@ -49,6 +50,7 @@ module tits_fun::tits_treasury {
       total_fees_collected: 0,
       admin: signer::address_of(admin),
       created_at: timestamp::now_seconds(),
+      reserve_coins: coin::zero<SupraCoin>(),
     });
   }
   
@@ -95,19 +97,21 @@ module tits_fun::tits_treasury {
     });
   }
   
-  // Emergency function to fund new pools
-  public entry fun emergency_start_pool(
+  // Function to fund new pools
+  public entry fun initialize_pool_funding(
     admin: &signer,
     amount: u64,
     pool_id: u64
   ) acquires Treasury {
-    let admin_addr = signer::address_of(admin);
     let treasury = borrow_global_mut<Treasury>(admin_addr);
     
-    // Verify admin
-    assert!(treasury.admin == admin_addr, error::permission_denied(EUNAUTHORIZED));
-    assert!(treasury.balance >= amount, error::invalid_state(EINSUFFICIENT_BALANCE));
+    // Extract actual coins from treasury
+    let funding_coins = coin::extract(&mut treasury.reserve_coins, amount);
     
+    // Deposit to admin account to fund the pool
+    coin::deposit(signer::address_of(admin), funding_coins);
+    
+    // Update balance tracking
     treasury.balance = treasury.balance - amount;
     
     event::emit(EmergencyPoolFund {
