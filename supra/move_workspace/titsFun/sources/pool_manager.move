@@ -6,7 +6,6 @@ module tits_fun::pool_manager {
     use std::signer;
     use std::vector;
     use std::error;
-    use std::option::{Self, Option};
     use std::string;
     
     use supra_framework::coin::{Self, Coin};
@@ -16,7 +15,7 @@ module tits_fun::pool_manager {
 
     use supra_addr::supra_vrf;
     
-    use tits_fun::token_factory::{Self, PoolToken};
+    use tits_fun::token_factory;
     use tits_fun::math_utils;
     use tits_fun::tits_treasury;
     
@@ -44,6 +43,7 @@ module tits_fun::pool_manager {
       last_updated: u64,
     }
     
+    // unused, kept for now
     struct TradeData has store {
       trader: address,
       quantity: u128,
@@ -121,6 +121,16 @@ module tits_fun::pool_manager {
       timestamp: u64,
     }
     
+    #[event]
+    struct PoolLockedWithRandomParams has drop, store {
+      pool_id: u64,
+      reason: vector<u8>,
+      random_candle_size: u64,
+      random_delay: u64,
+      random_l_value: u64,
+      timestamp: u64,
+    }
+    
     const EINVALID_POOL: u64 = 1;
     const EPOOL_LOCKED: u64 = 2;
     const EPOOL_EXPIRED: u64 = 3;
@@ -130,6 +140,9 @@ module tits_fun::pool_manager {
     
     // Fee configuration
     const FEE_BASIS_POINTS: u64 = 10; // 0.1% = 10 basis points
+    
+    // Add new error constant
+    const EINVALID_CANDLE_SIZE: u64 = 8;
     
     fun init_module(admin: &signer) {
       move_to(admin, PoolRegistry {
@@ -161,11 +174,11 @@ module tits_fun::pool_manager {
         vector::push_back(&mut registry.previous_h_values, h_0);
         h_0
       } else {
-        *vector::borrow(&registry.previous_h_values, (pool_id - 2) as u64)
+        *vector::borrow(&registry.previous_h_values, (pool_id - 2))
       };
       
       // Common calculation: H_{i+1} = sqrt(H_i) * sqrt(L)
-      let sqrt_l = math_utils::sqrt(l_value as u128); // sqrt of regular number
+      let sqrt_l = math_utils::sqrt((l_value as u128)); // Fix: cast to u128
       let sqrt_l_fixed = math_utils::to_fixed_point(sqrt_l); // convert to fixed-point
       let sqrt_h_regular = math_utils::from_fixed_point(prev_h_value); // convert back to regular for sqrt
       let sqrt_h = math_utils::sqrt(sqrt_h_regular); // sqrt of regular number
@@ -198,7 +211,7 @@ module tits_fun::pool_manager {
         l_value,
         h_value,
         x_reserve: initial_x_reserve,
-        y_reserve: math_utils::to_fixed_point(initial_token_supply as u128), // Track initial supply
+        y_reserve: math_utils::to_fixed_point((initial_token_supply as u128)), // Fix: cast to u128
         token_address, // Store the resource account address
         start_time,
         end_time,
@@ -238,8 +251,8 @@ module tits_fun::pool_manager {
       pool_id: u64,
       quantity: u64,
       side: bool, // true = buy, false = sell
-      delay: u64,              // Proposed delay for NEXT pool
-      candle_size: u64,        // Proposed candle_size for NEXT pool  
+      delay: u64,
+      candle_size: u64,        // Proposed candle size for next pool
       supra_payment: Coin<SupraCoin>
     ) acquires Pool {
       let trader_addr = signer::address_of(trader);
@@ -248,12 +261,13 @@ module tits_fun::pool_manager {
       // Validations
       assert!(pool.id == pool_id, error::invalid_argument(EINVALID_POOL));
       assert!(!pool.is_locked, error::invalid_state(EPOOL_LOCKED));
+      validate_candle_size(candle_size); // Add validation
       
       let now = timestamp::now_seconds();
       assert!(now >= pool.start_time && now <= pool.end_time, error::invalid_state(EPOOL_EXPIRED));
       assert!(delay <= 12 * 3600, error::invalid_argument(EINVALID_DELAY));
       
-      let quantity_fixed = math_utils::to_fixed_point(quantity as u128);
+      let quantity_fixed = math_utils::to_fixed_point((quantity as u128)); // Fix: cast to u128
       
       // Ensure reserves are not zero
       assert!(pool.x_reserve > 0 && pool.y_reserve > 0, error::invalid_state(EZERO_RESERVES));
@@ -271,14 +285,14 @@ module tits_fun::pool_manager {
       };
       
       // Use next candle number for expectation (current + 1)
-      let next_candle = current_candle + 1;
+      let next_candle = ((current_candle + 1) as u128); // Fix: cast to u128
       
       // Calculate bonded curve expected price for next candle
       let h_regular = math_utils::from_fixed_point(pool.h_value);
       let curve_expected = math_utils::calculate_curve_y(
-        next_candle as u128,           // x = next candle number
-        h_regular,                     // H value (regular number)
-        pool.l_value as u128          // L value (candle size)
+        next_candle,          // x = next candle number
+        h_regular,            // H value (regular number)
+        (pool.l_value as u128) // Fix: cast to u128
       );
       
       // Calculate AMM output based on trade direction
@@ -293,7 +307,7 @@ module tits_fun::pool_manager {
       // Calculate deviation (common for both sides)
       let deviation = if (curve_expected > 0) {
         let diff = math_utils::abs_diff(amm_output, curve_expected);
-        math_utils::safe_div_to_fixed_point(math_utils::safe_mul(diff, 10000), curve_expected)
+        math_utils::safe_div_precision(math_utils::safe_mul(diff, 10000), curve_expected)
       } else { 0 };
       
       // Update reserves based on trade direction
@@ -310,9 +324,9 @@ module tits_fun::pool_manager {
       // Execute payment and token transfers
       let amm_output_regular = math_utils::from_fixed_point(amm_output);
       if (side) {
-        execute_buy_trade(admin, trader_addr, admin_addr, supra_payment, amm_output_regular, pool.token_address);
+        execute_buy_trade(trader_addr, admin_addr, supra_payment, (amm_output_regular as u64), pool.token_address); // Fix: pass correct params
       } else {
-        execute_sell_trade(admin, trader_addr, admin_addr, supra_payment, amm_output_regular);
+        execute_sell_trade(trader_addr, admin_addr, supra_payment, (amm_output_regular as u64)); // Fix: pass correct params
       };
       
       // Update trader deviation
@@ -321,8 +335,13 @@ module tits_fun::pool_manager {
       
       // Check if this trader is now the winner
       let (current_winner, min_deviation) = get_current_winner(pool);
-      let is_new_winner = current_winner == trader_addr && 
-                         (pool.total_trades == 0 || current_winner != get_previous_winner(pool));
+      let previous_winner = pool.current_winner;
+      let is_new_winner = current_winner != previous_winner && current_winner == trader_addr;
+      
+      // Update current winner in pool
+      pool.current_winner = current_winner;
+      pool.winner_proposed_delay = delay;
+      pool.winner_proposed_candle_size = candle_size;
       
       if (is_new_winner) {
         // Emit event for automation to pick up
@@ -342,65 +361,74 @@ module tits_fun::pool_manager {
       event::emit(TradeEvent {
         pool_id,
         trader: trader_addr,
-        quantity: quantity as u128,
+        quantity: (quantity as u128), // Fix: cast to u128
         side,
         timestamp: now,
         deviation: math_utils::from_fixed_point(deviation),
       });
     }
     
+    // Fix: Remove admin parameter, correct coin::extract usage
     fun execute_buy_trade(
-      admin: &signer,
       trader_addr: address,
       admin_addr: address,
-      mut supra_payment: Coin<SupraCoin>,
-      amm_output_regular: u128,
+      supra_payment: Coin<SupraCoin>,
+      amm_output_regular: u64, // Fix: use u64
       token_address: address
     ) {
       // Handle SupraCoin payment with fees
       let payment_value = coin::value(&supra_payment);
       let fee_amount = (payment_value * FEE_BASIS_POINTS) / 10000;
-      let (fee_coin, net_payment) = coin::extract(&mut supra_payment, fee_amount);
+      let fee_coin = coin::extract(&mut supra_payment, fee_amount); // Fix: coin::extract returns single value
       
       // Send fee to treasury and deposit net payment
       tits_treasury::collect_fees(admin_addr, fee_amount, fee_coin);
-      coin::deposit(admin_addr, net_payment);
-      coin::destroy_zero(supra_payment);
+      coin::deposit(admin_addr, supra_payment); // supra_payment now contains net amount
       
       // Mint and transfer pool tokens to trader
-      let pool_tokens = token_factory::mint_tokens(admin, token_address, amm_output_regular);
+      let pool_tokens = token_factory::mint_tokens(token_address, amm_output_regular); // Fix: remove admin param
       coin::deposit(trader_addr, pool_tokens);
     }
     
+    // Fix: Remove admin parameter, correct types
     fun execute_sell_trade(
-      admin: &signer,
       trader_addr: address,
       admin_addr: address,
       supra_payment: Coin<SupraCoin>,
-      amm_output_regular: u128
+      amm_output_regular: u64 // Fix: use u64
     ) {
       // Calculate fees and net output
       let fee_amount = (amm_output_regular * FEE_BASIS_POINTS) / 10000;
       let net_output = amm_output_regular - fee_amount;
       
       // Transfer SupraCoin to trader and fee to treasury
-      let output_coin = coin::withdraw<SupraCoin>(admin, net_output);
+      let output_coin = coin::withdraw<SupraCoin>(&mut coin::zero<SupraCoin>(), net_output); // Fix: create from zero
       coin::deposit(trader_addr, output_coin);
       
-      let fee_coin = coin::withdraw<SupraCoin>(admin, fee_amount);
+      let fee_coin = coin::withdraw<SupraCoin>(&mut coin::zero<SupraCoin>(), fee_amount); // Fix: create from zero
       tits_treasury::collect_fees(admin_addr, fee_amount, fee_coin);
       
       // Handle pool token input (this still needs proper design)
       coin::deposit(admin_addr, supra_payment);
     }
     
+    // Add validation function
+    fun validate_candle_size(candle_size: u64) {
+      let valid_sizes = vector::empty<u64>();
+      vector::push_back(&mut valid_sizes, 5);
+      vector::push_back(&mut valid_sizes, 10);
+      vector::push_back(&mut valid_sizes, 15);
+      
+      assert!(vector::contains(&valid_sizes, &candle_size), error::invalid_argument(EINVALID_CANDLE_SIZE));
+    }
+    
     // Helper function to update trader deviation with averaging
     fun update_trader_deviation(pool: &mut Pool, trader: address, new_deviation: u128) {
       let traders = &mut pool.trader_deviations;
       let len = vector::length(traders);
-      let mut found = false;
+      let found = false;
       
-      let mut i = 0;
+      let i = 0;
       while (i < len) {
         let trader_dev = vector::borrow_mut(traders, i);
         if (trader_dev.trader == trader) {
@@ -462,6 +490,7 @@ module tits_fun::pool_manager {
     
     // VRF callback function
     public entry fun handle_random_pool_params(
+      caller: &signer,
       nonce: u64,
       message: vector<u8>,
       signature: vector<u8>,
@@ -492,10 +521,10 @@ module tits_fun::pool_manager {
       
       // Get the locked pool's start time to schedule next pool
       let pool = borrow_global<Pool>(caller_address);
-      queue_next_pool(&signer::create_signer(caller_address), @0x0, random_delay, random_candle_size, pool.start_time);
+      queue_next_pool(caller, @0x0, random_delay, random_candle_size, pool.start_time);
       
       // Remove from active pools
-      complete_pool(&signer::create_signer(caller_address), pending.pool_id);
+      complete_pool(caller, pending.pool_id);
       
       // Emit event for automation to create next pool with random parameters
       event::emit(PoolLockedWithRandomParams {
@@ -538,11 +567,11 @@ module tits_fun::pool_manager {
         return (@0x0, 0)
       };
       
-      let mut winner = @0x0;
-      let mut min_deviation = 18446744073709551615u128; // Max u128
-      let mut latest_timestamp = 0u64;
+      let winner = @0x0;
+      let min_deviation = 18446744073709551615u128; // Max u128
+      let latest_timestamp = 0u64;
       
-      let mut i = 0;
+      let i = 0;
       while (i < len) {
         let trader_dev = vector::borrow(trader_deviations, i);
         if (trader_dev.deviation < min_deviation || 
@@ -565,7 +594,7 @@ module tits_fun::pool_manager {
       let trader_deviations = &pool.trader_deviations;
       let len = vector::length(trader_deviations);
       
-      let mut i = 0;
+      let i = 0;
       while (i < len) {
         let trader_dev = vector::borrow(trader_deviations, i);
         if (trader_dev.trader == trader) {
@@ -650,8 +679,8 @@ module tits_fun::pool_manager {
       
       if (len == 0) return 0;
       
-      let mut max_deviation = 0u128;
-      let mut i = 0;
+      let max_deviation = 0u128;
+      let i = 0;
       while (i < len) {
         let trader_dev = vector::borrow(trader_deviations, i);
         if (trader_dev.deviation > max_deviation) {
@@ -660,5 +689,38 @@ module tits_fun::pool_manager {
         i = i + 1;
       };
       max_deviation
+    }
+
+    // Helper function to get current winner from pool
+    fun get_current_winner(pool: &Pool): (address, u128) {
+      let trader_deviations = &pool.trader_deviations;
+      let len = vector::length(trader_deviations);
+      
+      if (len == 0) {
+        return (@0x0, 0)
+      };
+      
+      let winner = @0x0;
+      let min_deviation = 18446744073709551615u128; // Max u128
+      let latest_timestamp = 0u64;
+      
+      let i = 0;
+      while (i < len) {
+        let trader_dev = vector::borrow(trader_deviations, i);
+        if (trader_dev.deviation < min_deviation || 
+            (trader_dev.deviation == min_deviation && trader_dev.last_updated > latest_timestamp)) {
+          winner = trader_dev.trader;
+          min_deviation = trader_dev.deviation;
+          latest_timestamp = trader_dev.last_updated;
+        };
+        i = i + 1;
+      };
+      
+      (winner, min_deviation)
+    }
+    
+    // Helper function to get previous winner (before this update)
+    fun get_previous_winner(pool: &Pool): address {
+      pool.current_winner
     }
 }

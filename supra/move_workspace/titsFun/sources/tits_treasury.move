@@ -103,6 +103,7 @@ module tits_fun::tits_treasury {
     amount: u64,
     pool_id: u64
   ) acquires Treasury {
+    let admin_addr = signer::address_of(admin);
     let treasury = borrow_global_mut<Treasury>(admin_addr);
     
     // Extract actual coins from treasury

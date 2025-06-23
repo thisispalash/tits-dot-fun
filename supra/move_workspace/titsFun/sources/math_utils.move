@@ -2,7 +2,6 @@
 // MATH UTILITIES MODULE
 // =============================================================================
 module tits_fun::math_utils {
-  use std::error;
   
   const EOVERFLOW: u64 = 1;
   const EINVALID_INPUT: u64 = 2;
@@ -109,7 +108,7 @@ module tits_fun::math_utils {
     // For small values, use a more direct approach
     if (x < 10000) {
       // Simple linear search for small values (more predictable)
-      let mut i = 1;
+      let i = 1;
       while (i * i <= x && i < 100) {
         i = i + 1;
       };
@@ -117,10 +116,10 @@ module tits_fun::math_utils {
     };
     
     // Newton's method for larger values
-    let mut z = x;
-    let mut y = (x + 1) / 2;
+    let z = x;
+    let y = (x + 1) / 2;
     
-    let mut iterations = 0;
+    let iterations = 0;
     while (y < z && iterations < 20) { // Reduced iteration limit
       z = y;
       y = (x / y + y) / 2;
@@ -144,7 +143,7 @@ module tits_fun::math_utils {
     let denominator = safe_mul(l, l);
     
     // Convert result to fixed-point
-    safe_div_to_fixed_point(numerator, denominator)
+    safe_div_fixed_point(numerator, denominator)
   }
   
   // Calculate x from y on bonded curve (inverse function)
@@ -153,7 +152,7 @@ module tits_fun::math_utils {
     if (y == 0) return 0;
     if (h == 0 || l == 0) return 0; // Graceful handling
     
-    // Using quadratic formula: x = (4*H*L ± sqrt((4*H*L)^2 - 16*H*y*L^2)) / (8*H)
+    // Using quadratic formula: x = (4*H*L +/- sqrt((4*H*L)^2 - 16*H*y*L^2)) / (8*H)
     let four_h = safe_mul(4, h);
     let four_h_l = safe_mul(four_h, l);
     let eight_h = safe_mul(8, h);

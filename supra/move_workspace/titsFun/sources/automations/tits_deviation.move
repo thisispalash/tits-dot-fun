@@ -1,5 +1,6 @@
 // Deviation Checker (Automation)
 module tits_fun::tits_deviation {
+  use std::signer;
   use tits_fun::pool_manager;
   use supra_framework::timestamp;
   

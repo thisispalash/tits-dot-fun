@@ -5,7 +5,7 @@ module tits_fun::token_factory {
   use std::string::{Self, String};
   use std::signer;
   use std::vector;
-  use std::error;
+  use std::bcs;
   use supra_framework::coin::{Self, Coin, MintCapability, BurnCapability, FreezeCapability};
   use supra_framework::timestamp;
   use supra_framework::event;
@@ -32,7 +32,7 @@ module tits_fun::token_factory {
     admin: address,
   }
   
-  struct PoolInfo has store {
+  struct PoolInfo has store, copy {
     pool_id: u64,
     token_address: address,  // The resource account address
     name: String,
@@ -130,15 +130,10 @@ module tits_fun::token_factory {
       timestamp: timestamp::now_seconds(),
     });
     
-    // Clean up resource account capability
-    account::destroy_resource_account_cap(resource_signer_cap);
-    
     (token_address, initial_tokens)
   }
   
-  // Mint more tokens for a specific pool
   public fun mint_tokens(
-    admin: &signer,
     token_address: address,
     amount: u64
   ): Coin<PoolToken> acquires TokenCaps {
@@ -188,7 +183,7 @@ module tits_fun::token_factory {
     let pools = &registry.created_pools;
     let len = vector::length(pools);
     
-    let mut i = 0;
+    let i = 0;
     while (i < len) {
       let pool_info = vector::borrow(pools, i);
       if (pool_info.pool_id == pool_id) {
@@ -202,6 +197,6 @@ module tits_fun::token_factory {
   
   #[view]
   public fun get_all_pools(admin: address): vector<PoolInfo> acquires PoolRegistry {
-    borrow_global<PoolRegistry>(admin).created_pools
+    *&borrow_global<PoolRegistry>(admin).created_pools
   }
 }

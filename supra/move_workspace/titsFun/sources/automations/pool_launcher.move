@@ -1,5 +1,6 @@
 // Pool Launcher (Automation)
 module tits_fun::pool_launcher {
+  use std::signer;
   use tits_fun::pool_manager;
   use tits_fun::tits_deviation;
   use supra_framework::timestamp;
@@ -23,7 +24,7 @@ module tits_fun::pool_launcher {
     let now = timestamp::now_seconds();
     if (queued_start_time > 0 && now >= queued_start_time) {
       let l_value = (24 * 60) / queued_candle_size;
-      pool_manager::create_pool(admin, l_value, queued_delay, 1000000);
+      pool_manager::create_pool(admin, l_value, queued_delay);
       pool_manager::clear_queue(admin);
     };
   }
