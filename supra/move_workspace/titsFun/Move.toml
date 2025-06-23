@@ -1,0 +1,17 @@
+[package]
+name = "titsDotFun"
+version = "1.0.0"
+authors = []
+
+[addresses]
+deployer_addr = "0x5d9e5ddecdcaf31b27ccf90970574d4001fe819928bc811a9279347fc769ffb8"
+supra_addr = "0x1"
+
+[dev-addresses]
+
+[dependencies.SupraFramework]
+git = "https://github.com/Entropy-Foundation/aptos-core.git"
+rev = "dev"
+subdir = "aptos-move/framework/supra-framework"
+
+[dev-dependencies]
