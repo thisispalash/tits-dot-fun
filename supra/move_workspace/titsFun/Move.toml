@@ -1,10 +1,10 @@
 [package]
-name = "titsDotFun"
+name = "tits_dot_fun"
 version = "1.0.0"
 authors = []
 
 [addresses]
-deployer_addr = "0x5d9e5ddecdcaf31b27ccf90970574d4001fe819928bc811a9279347fc769ffb8"
+tits_fun = "0x5d9e5ddecdcaf31b27ccf90970574d4001fe819928bc811a9279347fc769ffb8"
 
 [dev-addresses]
 
