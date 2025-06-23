@@ -1,7 +1,7 @@
 // =============================================================================
 // TREASURY MODULE
 // =============================================================================
-module tits_fun::treasury {
+module tits_fun::tits_treasury {
   use std::signer;
   use std::error;
   use supra_framework::coin::{Self, Coin};
