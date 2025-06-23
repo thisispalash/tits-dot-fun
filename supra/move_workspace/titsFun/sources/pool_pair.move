@@ -15,6 +15,9 @@ module deployer_addr::pool_pair {
   use deployer_addr::stable_coin::StableCoin;
   use deployer_addr::token_factory::{Self, PoolToken};
 
+  // ================= CONSTANTS =================
+  const POOL_DURATION_SECONDS: u64 = 86400; // 24 hours
+
   // ================= STRUCTS =================
   struct Pool has key {
     id: u64,
@@ -26,12 +29,14 @@ module deployer_addr::pool_pair {
     creator: address,
     total_supply: u64,
     reserve_coin: Coin<StableCoin>,
-    reserve_token: Coin<PoolToken>,
+    reserve_token: Coin<StableCoin>,
     trades: vector<TradePoint>,
     trader_scores: vector<TraderScore>,
     winner: address,
     total_volume: u64,
     last_price: u64,
+    current_candle: u64,
+    candle_prices: vector<u64>, // Price at each candle close
   }
 
   struct TradePoint has store, copy, drop {
@@ -48,6 +53,13 @@ module deployer_addr::pool_pair {
     trade_count: u64,
     volume: u64,
     score: u64, // Lower is better
+  }
+
+  struct PoolToken has key {
+    name: String,
+    symbol: String,
+    decimals: u8,
+    total_supply: u64,
   }
 
   // ================= EVENTS =================
@@ -67,7 +79,9 @@ module deployer_addr::pool_pair {
     amount_in: u64,
     amount_out: u64,
     price: u64,
-    curve_deviation: u64,
+    expected_price: u64,
+    deviation: u64,
+    candle_number: u64,
     timestamp: u64,
   }
 
@@ -76,6 +90,7 @@ module deployer_addr::pool_pair {
     pool_id: u64,
     reason: String,
     final_deviation: u64,
+    candle_number: u64,
     timestamp: u64,
   }
 
@@ -101,47 +116,41 @@ module deployer_addr::pool_pair {
   public fun create_pool(
     account: &signer,
     pool_id: u64,
+    token_name: String,
+    token_symbol: String,
     params: CurveParams,
     start_time: u64,
   ) {
     let creator = signer::address_of(account);
     
-    // Create unique pool token
-    let token_name = string::utf8(b"Curve Pool Token #");
-    string::append(&mut token_name, string::utf8(b"1")); // Would use pool_id
-    let token_symbol = string::utf8(b"CPT");
-    
-    let initial_supply = 1000000_00000000; // 1M tokens with 8 decimals
-    let (mint_cap, burn_cap) = token_factory::create_pool_token(
-      account,
-      pool_id,
-      token_name,
-      token_symbol,
-      initial_supply,
-    );
-
-    // Mint initial token supply
-    let initial_tokens = token_factory::mint_tokens(&mint_cap, initial_supply);
-
     let pool = Pool {
       id: pool_id,
       params,
       start_time,
-      end_time: start_time + params.pool_duration,
+      end_time: start_time + POOL_DURATION_SECONDS,
       is_active: false,
       is_locked: false,
       creator,
-      total_supply: initial_supply,
+      total_supply: 1000000,
       reserve_coin: coin::zero<StableCoin>(),
-      reserve_token: initial_tokens,
+      reserve_token: coin::zero<StableCoin>(),
       trades: vector::empty(),
       trader_scores: vector::empty(),
       winner: @0x0,
       total_volume: 0,
       last_price: 0,
+      current_candle: 0,
+      candle_prices: vector::empty(),
     };
 
     move_to(account, pool);
+    
+    move_to(account, PoolToken {
+      name: token_name,
+      symbol: token_symbol,
+      decimals: 8,
+      total_supply: 1000000,
+    });
 
     event::emit(PoolCreated {
       pool_id,
@@ -171,134 +180,117 @@ module deployer_addr::pool_pair {
 
   public entry fun buy_tokens(
     account: &signer,
-    pool_addr: address,
+    pool_id: u64,
     coin_amount: u64,
   ) acquires Pool {
     let trader = signer::address_of(account);
-    let pool = borrow_global_mut<Pool>(pool_addr);
+    let pool = borrow_global_mut<Pool>(trader);
     
-    // Validation checks
-    assert!(pool.is_active, error::permission_denied(EPOOL_NOT_ACTIVE));
+    assert!(pool.id == pool_id, error::invalid_argument(EPOOL_NOT_ACTIVE));
     assert!(!pool.is_locked, error::permission_denied(EPOOL_LOCKED));
     assert!(timestamp::now_seconds() >= pool.start_time, error::permission_denied(EPOOL_NOT_STARTED));
     assert!(timestamp::now_seconds() <= pool.end_time, error::permission_denied(EPOOL_ENDED));
-    assert!(coin_amount > 0, error::invalid_argument(EINVALID_AMOUNT));
-
-    // Calculate tokens to receive
+    
+    // Update current candle
+    update_current_candle(pool);
+    
+    // Calculate expected price based on curve and current candle
+    let expected_price = calculate_expected_price_for_candle(pool, pool.current_candle);
+    
+    // Calculate actual price and execute trade
     let tokens_out = calculate_buy_amount(pool, coin_amount);
     assert!(tokens_out > 0, error::invalid_argument(EINVALID_AMOUNT));
-    assert!(coin::value(&pool.reserve_token) >= tokens_out, error::insufficient_funds(EINSUFFICIENT_LIQUIDITY));
 
-    // Execute trade
     let payment = coin::withdraw<StableCoin>(account, coin_amount);
     coin::merge(&mut pool.reserve_coin, payment);
     
-    let tokens_to_send = coin::extract(&mut pool.reserve_token, tokens_out);
-    coin::deposit(trader, tokens_to_send);
+    let token_payout = coin::withdraw<StableCoin>(account, tokens_out); // Simplified
+    coin::deposit(trader, token_payout);
     
     pool.total_volume = pool.total_volume + coin_amount;
 
-    // Calculate position and deviation
-    let current_x = calculate_position_x(pool);
-    let expected_y = calculate_curve_y(&pool.params, current_x);
-    let actual_y = calculate_current_price(pool);
-    let deviation = calculate_deviation(expected_y, actual_y);
-    
-    pool.last_price = actual_y;
-
-    // Record trade
-    let trade_point = TradePoint {
-      x: current_x,
-      y: actual_y,
-      timestamp: timestamp::now_seconds(),
-      deviation,
-      trader,
-    };
-    vector::push_back(&mut pool.trades, trade_point);
+    // Calculate actual price and deviation
+    let actual_price = calculate_current_price(pool);
+    let deviation = calculate_deviation(expected_price, actual_price);
 
     // Update trader score
     update_trader_score(pool, trader, deviation, coin_amount);
 
-    // Check threshold
+    // Check if deviation exceeds threshold - LOCK POOL
     if (deviation > (pool.params.threshold_percent as u64)) {
-      lock_pool(pool);
+      lock_pool_and_transfer_all(pool);
+    } else {
+      // Record price for this candle
+      if (vector::length(&pool.candle_prices) <= pool.current_candle) {
+        vector::push_back(&mut pool.candle_prices, actual_price);
+      } else {
+        *vector::borrow_mut(&mut pool.candle_prices, pool.current_candle) = actual_price;
+      };
     };
 
     event::emit(Trade {
-      pool_id: pool.id,
+      pool_id,
       trader,
       is_buy: true,
       amount_in: coin_amount,
       amount_out: tokens_out,
-      price: actual_y,
-      curve_deviation: deviation,
+      price: actual_price,
+      expected_price,
+      deviation,
+      candle_number: pool.current_candle,
       timestamp: timestamp::now_seconds(),
     });
   }
 
   public entry fun sell_tokens(
     account: &signer,
-    pool_addr: address,
+    pool_id: u64,
     token_amount: u64,
   ) acquires Pool {
     let trader = signer::address_of(account);
-    let pool = borrow_global_mut<Pool>(pool_addr);
+    let pool = borrow_global_mut<Pool>(trader);
     
-    // Validation checks
-    assert!(pool.is_active, error::permission_denied(EPOOL_NOT_ACTIVE));
+    assert!(pool.id == pool_id, error::invalid_argument(EPOOL_NOT_ACTIVE));
     assert!(!pool.is_locked, error::permission_denied(EPOOL_LOCKED));
     assert!(timestamp::now_seconds() >= pool.start_time, error::permission_denied(EPOOL_NOT_STARTED));
     assert!(timestamp::now_seconds() <= pool.end_time, error::permission_denied(EPOOL_ENDED));
-    assert!(token_amount > 0, error::invalid_argument(EINVALID_AMOUNT));
 
-    // Calculate coins to receive
+    update_current_candle(pool);
+    
+    let expected_price = calculate_expected_price_for_candle(pool, pool.current_candle);
     let coins_out = calculate_sell_amount(pool, token_amount);
     assert!(coins_out > 0, error::invalid_argument(EINVALID_AMOUNT));
-    assert!(coin::value(&pool.reserve_coin) >= coins_out, error::insufficient_funds(EINSUFFICIENT_LIQUIDITY));
 
-    // Execute trade
-    let tokens_payment = coin::withdraw<PoolToken>(account, token_amount);
-    coin::merge(&mut pool.reserve_token, tokens_payment);
-    
-    let coins_to_send = coin::extract(&mut pool.reserve_coin, coins_out);
-    coin::deposit(trader, coins_to_send);
-    
+    // Execute trade (simplified)
+    let payout = coin::extract(&mut pool.reserve_coin, coins_out);
+    coin::deposit(trader, payout);
     pool.total_volume = pool.total_volume + coins_out;
 
-    // Calculate position and deviation
-    let current_x = calculate_position_x(pool);
-    let expected_y = calculate_curve_y(&pool.params, current_x);
-    let actual_y = calculate_current_price(pool);
-    let deviation = calculate_deviation(expected_y, actual_y);
-    
-    pool.last_price = actual_y;
+    let actual_price = calculate_current_price(pool);
+    let deviation = calculate_deviation(expected_price, actual_price);
 
-    // Record trade
-    let trade_point = TradePoint {
-      x: current_x,
-      y: actual_y,
-      timestamp: timestamp::now_seconds(),
-      deviation,
-      trader,
-    };
-    vector::push_back(&mut pool.trades, trade_point);
-
-    // Update trader score
     update_trader_score(pool, trader, deviation, coins_out);
 
-    // Check threshold
     if (deviation > (pool.params.threshold_percent as u64)) {
-      lock_pool(pool);
+      lock_pool_and_transfer_all(pool);
+    } else {
+      if (vector::length(&pool.candle_prices) <= pool.current_candle) {
+        vector::push_back(&mut pool.candle_prices, actual_price);
+      } else {
+        *vector::borrow_mut(&mut pool.candle_prices, pool.current_candle) = actual_price;
+      };
     };
 
     event::emit(Trade {
-      pool_id: pool.id,
+      pool_id,
       trader,
       is_buy: false,
       amount_in: token_amount,
       amount_out: coins_out,
-      price: actual_y,
-      curve_deviation: deviation,
+      price: actual_price,
+      expected_price,
+      deviation,
+      candle_number: pool.current_candle,
       timestamp: timestamp::now_seconds(),
     });
   }
@@ -328,25 +320,33 @@ module deployer_addr::pool_pair {
   }
 
   // ================= HELPER FUNCTIONS =================
-  fun calculate_curve_y(params: &CurveParams, x: u64): u64 {
-    let h = params.height;
-    let l = params.length;
+  fun update_current_candle(pool: &mut Pool) {
+    let elapsed = timestamp::now_seconds() - pool.start_time;
+    let candle_duration = (pool.params.ticker_duration as u64) * 60; // Convert minutes to seconds
+    pool.current_candle = elapsed / candle_duration;
     
-    if (x > l) return 0;
+    // Ensure we don't exceed total candles
+    if (pool.current_candle >= pool.params.candle_count) {
+      pool.current_candle = pool.params.candle_count - 1;
+    };
+  }
+
+  fun calculate_expected_price_for_candle(pool: &Pool, candle: u64): u64 {
+    let h = pool.params.height;
+    let l = pool.params.candle_count;
     
-    // y = 4*H/L * x * (1 - x/L) for parabola
-    // Avoiding division issues by rearranging
+    if (candle >= l) return 0;
+    
+    let x = candle;
     let numerator = 4 * h * x * (l - x);
     numerator / (l * l)
   }
 
   fun calculate_buy_amount(pool: &Pool, coin_amount: u64): u64 {
-    // Constant product formula: x * y = k
     let k = coin::value(&pool.reserve_coin) * coin::value(&pool.reserve_token);
+    if (k == 0) return coin_amount; // Initial trades
+    
     let new_coin_reserve = coin::value(&pool.reserve_coin) + coin_amount;
-    
-    if (new_coin_reserve == 0) return 0;
-    
     let new_token_reserve = k / new_coin_reserve;
     let current_token_reserve = coin::value(&pool.reserve_token);
     
@@ -359,10 +359,9 @@ module deployer_addr::pool_pair {
 
   fun calculate_sell_amount(pool: &Pool, token_amount: u64): u64 {
     let k = coin::value(&pool.reserve_coin) * coin::value(&pool.reserve_token);
+    if (k == 0) return 0;
+    
     let new_token_reserve = coin::value(&pool.reserve_token) + token_amount;
-    
-    if (new_token_reserve == 0) return 0;
-    
     let new_coin_reserve = k / new_token_reserve;
     let current_coin_reserve = coin::value(&pool.reserve_coin);
     
@@ -373,15 +372,6 @@ module deployer_addr::pool_pair {
     }
   }
 
-  fun calculate_position_x(pool: &Pool): u64 {
-    let elapsed = timestamp::now_seconds() - pool.start_time;
-    let total_duration = pool.end_time - pool.start_time;
-    
-    if (total_duration == 0) return 0;
-    
-    (elapsed * pool.params.length) / total_duration
-  }
-
   fun calculate_current_price(pool: &Pool): u64 {
     let token_reserve = coin::value(&pool.reserve_token);
     if (token_reserve == 0) return 0;
@@ -390,7 +380,7 @@ module deployer_addr::pool_pair {
   }
 
   fun calculate_deviation(expected: u64, actual: u64): u64 {
-    if (expected == 0) return 100; // Max deviation if expected is 0
+    if (expected == 0) return 100;
     
     if (actual > expected) {
       ((actual - expected) * 100) / expected
@@ -411,7 +401,7 @@ module deployer_addr::pool_pair {
         score.total_deviation = score.total_deviation + deviation;
         score.trade_count = score.trade_count + 1;
         score.volume = score.volume + volume;
-        score.score = score.total_deviation / score.trade_count; // Average deviation
+        score.score = score.total_deviation / score.trade_count;
         found = true;
       };
       i = i + 1;
@@ -439,7 +429,7 @@ module deployer_addr::pool_pair {
     
     while (i < len) {
       let score = vector::borrow(scores, i);
-      if (score.score < best_score && score.trade_count >= 3) { // Minimum 3 trades
+      if (score.score < best_score && score.trade_count >= 3) {
         best_score = score.score;
         best_trader = score.trader;
       };
@@ -464,27 +454,28 @@ module deployer_addr::pool_pair {
     0
   }
 
-  fun lock_pool(pool: &mut Pool) {
+  fun lock_pool_and_transfer_all(pool: &mut Pool) {
     pool.is_locked = true;
     pool.is_active = false;
     
-    // Transfer remaining funds to treasury
+    // Transfer ALL remaining funds to treasury (100% to admin/deployer)
     let remaining_coins = coin::extract_all(&mut pool.reserve_coin);
-    let remaining_tokens = coin::value(&pool.reserve_token);
+    let remaining_tokens = coin::extract_all(&mut pool.reserve_token);
     
-    treasury::receive_locked_funds(remaining_coins, remaining_tokens, pool.id);
+    treasury::receive_all_locked_funds(remaining_coins, remaining_tokens, pool.id);
     
     event::emit(PoolLocked {
       pool_id: pool.id,
       reason: string::utf8(b"Deviation threshold exceeded"),
-      final_deviation: pool.last_price,
+      final_deviation: if (vector::length(&pool.candle_prices) > 0) *vector::borrow(&pool.candle_prices, vector::length(&pool.candle_prices) - 1) else 0,
+      candle_number: pool.current_candle,
       timestamp: timestamp::now_seconds(),
     });
   }
 
   // ================= VIEW FUNCTIONS =================
   #[view]
-  public fun get_pool_info(pool_addr: address): (u64, bool, bool, u64, u64, u64, address) acquires Pool {
+  public fun get_pool_info(pool_addr: address): (u64, bool, bool, u64, u64, u64, address, u64) acquires Pool {
     let pool = borrow_global<Pool>(pool_addr);
     (
       pool.id,
@@ -493,27 +484,19 @@ module deployer_addr::pool_pair {
       coin::value(&pool.reserve_token),
       coin::value(&pool.reserve_coin),
       pool.total_volume,
-      pool.winner
+      pool.winner,
+      pool.current_candle
     )
   }
 
   #[view]
-  public fun get_current_price(pool_addr: address): u64 acquires Pool {
+  public fun get_expected_price_for_current_candle(pool_addr: address): u64 acquires Pool {
     let pool = borrow_global<Pool>(pool_addr);
-    calculate_current_price(pool)
+    calculate_expected_price_for_candle(pool, pool.current_candle)
   }
 
   #[view]
-  public fun get_curve_position(pool_addr: address): (u64, u64, u64) acquires Pool {
-    let pool = borrow_global<Pool>(pool_addr);
-    let x = calculate_position_x(pool);
-    let expected_y = calculate_curve_y(&pool.params, x);
-    let actual_y = calculate_current_price(pool);
-    (x, expected_y, actual_y)
-  }
-
-  #[view]
-  public fun get_trader_scores(pool_addr: address): vector<TraderScore> acquires Pool {
-    borrow_global<Pool>(pool_addr).trader_scores
+  public fun get_candle_prices(pool_addr: address): vector<u64> acquires Pool {
+    borrow_global<Pool>(pool_addr).candle_prices
   }
 }
