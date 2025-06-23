@@ -1,0 +1,23 @@
+{
+  "name": "supra-code-generator",
+  "version": "1.0.0",
+  "description": "Lean MCP for generating Supra Move contracts and TypeScript SDK code",
+  "type": "module",
+  "main": "build/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node build/index.js",
+    "dev": "ts-node src/index.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0",
+    "ts-node": "^10.9.0"
+  },
+  "keywords": ["supra", "blockchain", "move", "mcp", "code-generation"],
+  "author": "Supra Developer",
+  "license": "MIT"
+}

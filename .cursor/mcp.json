@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "supra-code-generator": {
+      "command": "node",
+      "args": ["/Users/thisispalash/local/tits-fun/supra-code-gen/build/index.js"]
+    }
+  }
+}
