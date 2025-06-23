@@ -4,7 +4,7 @@ import './globals.css';
 
 import cn from '@/util/cn';
 
-import MathProvider from '@/context/MathProvider';
+import AppProvider from '@/context/AppProvider';
 import Web3Providers from '@/context/Web3Providers';
 
 const sourGummy = Sour_Gummy({
@@ -27,14 +27,15 @@ export default function RootLayout({
       <body
         className={cn(
           sourGummy.variable,
+          'container mx-auto p-4',
           'bg-background text-foreground',
           'antialiased font-default',
         )}
       >
         <Web3Providers>
-          <MathProvider>
+          <AppProvider>
             {children}
-          </MathProvider>
+          </AppProvider>
         </Web3Providers>
       </body>
     </html>
