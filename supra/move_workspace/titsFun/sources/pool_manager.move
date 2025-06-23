@@ -184,19 +184,25 @@ module tits_fun::pool_manager {
         math_utils::calculate_amm_out(quantity_fixed, pool.y_reserve, pool.x_reserve)
       };
       
-      // Calculate bonded curve expected output (for deviation calculation)
-      let curve_expected = if (side) {
-        // For buy: how many tokens should we get according to bonded curve
-        let new_x_regular = math_utils::from_fixed_point(math_utils::safe_add(pool.x_reserve, quantity_fixed));
-        let h_regular = math_utils::from_fixed_point(pool.h_value);
-        math_utils::calculate_curve_y(new_x_regular, h_regular, pool.l_value as u128)
+      // Calculate current candle number based on time elapsed
+      let time_elapsed = now - pool.start_time;
+      let candle_duration = candle_size * 60; // candle_size is in minutes, convert to seconds
+      let current_candle = if (time_elapsed < candle_duration) {
+        0 // No complete candle yet
       } else {
-        // For sell: we're selling pool tokens, so compare the SupraCoin we should get
-        // Use current position on bonded curve as reference
-        let current_x_regular = math_utils::from_fixed_point(pool.x_reserve);
-        let h_regular = math_utils::from_fixed_point(pool.h_value);
-        math_utils::calculate_curve_y(current_x_regular, h_regular, pool.l_value as u128)
+        time_elapsed / candle_duration
       };
+      
+      // Use next candle number for expectation (current + 1)
+      let next_candle = current_candle + 1;
+      
+      // Calculate bonded curve expected price for next candle
+      let h_regular = math_utils::from_fixed_point(pool.h_value);
+      let curve_expected = math_utils::calculate_curve_y(
+        next_candle as u128,           // x = next candle number
+        h_regular,                     // H value (regular number)
+        pool.l_value as u128          // L value (candle size)
+      );
       
       // Calculate deviation: |AMM_output - Curve_expected| / Curve_expected * 10000 (basis points)
       let deviation = if (curve_expected > 0) {
