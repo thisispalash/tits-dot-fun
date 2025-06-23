@@ -253,7 +253,7 @@ module tits_fun::pool_manager {
       side: bool, // true = buy, false = sell
       delay: u64,
       candle_size: u64,        // Proposed candle size for next pool
-      supra_amount: u64
+      supra_amount: u64        // Add this back
     ) acquires Pool {
       let trader_addr = signer::address_of(trader);
       let pool = borrow_global_mut<Pool>(admin_addr);
@@ -267,20 +267,24 @@ module tits_fun::pool_manager {
       assert!(now >= pool.start_time && now <= pool.end_time, error::invalid_state(EPOOL_EXPIRED));
       assert!(delay <= 12 * 3600, error::invalid_argument(EINVALID_DELAY));
 
-      // Convert input quantity to fixed point for AMM calculations
-      let quantity_fixed = math_utils::to_fixed_point((quantity as u128));
+      // Convert input quantities to fixed point for AMM calculations
+      let input_amount_fixed = if (side) {
+          math_utils::to_fixed_point((supra_amount as u128))
+      } else {
+          math_utils::to_fixed_point((quantity as u128))
+      };
 
       // Handle payments based on trade direction
-      let supra_payment;
-      let pool_token_payment;
-      if (side) {
-        // BUY: trader provides SupraCoin
-        supra_payment = coin::withdraw<SupraCoin>(trader, supra_amount);
-        pool_token_payment = option::none(); // Not needed for buy
+      let supra_payment = if (side) {
+          coin::withdraw<SupraCoin>(trader, supra_amount)
       } else {
-        // SELL: trader provides pool tokens
-        supra_payment = option::none(); // Not needed for sell
-        pool_token_payment = coin::withdraw<token_factory::PoolToken>(trader, quantity);
+        coin::withdraw<SupraCoin>(admin_addr, 0) // Zero coin for initialization
+      };
+
+      let pool_token_payment = if (side) {
+        coin::withdraw<token_factory::PoolToken>(admin_addr, 0) // Zero coin for initialization
+      } else {
+        coin::withdraw<token_factory::PoolToken>(trader, quantity)
       };
       
       // Ensure reserves are not zero
@@ -312,10 +316,10 @@ module tits_fun::pool_manager {
       // Calculate AMM output based on trade direction
       let (input_reserve, output_reserve, amm_output) = if (side) {
         // BUY: SupraCoin -> Pool tokens
-        (pool.x_reserve, pool.y_reserve, math_utils::calculate_amm_out(quantity_fixed, pool.x_reserve, pool.y_reserve))
+        (pool.x_reserve, pool.y_reserve, math_utils::calculate_amm_out(input_amount_fixed, pool.x_reserve, pool.y_reserve))
       } else {
         // SELL: Pool tokens -> SupraCoin  
-        (pool.y_reserve, pool.x_reserve, math_utils::calculate_amm_out(quantity_fixed, pool.y_reserve, pool.x_reserve))
+        (pool.y_reserve, pool.x_reserve, math_utils::calculate_amm_out(input_amount_fixed, pool.y_reserve, pool.x_reserve))
       };
       
       // Calculate deviation (common for both sides)
@@ -327,20 +331,20 @@ module tits_fun::pool_manager {
       // Update reserves based on trade direction
       if (side) {
         // BUY: Add SupraCoin, subtract pool tokens
-        pool.x_reserve = math_utils::safe_add(pool.x_reserve, supra_payment);
+        pool.x_reserve = math_utils::safe_add(pool.x_reserve, input_amount_fixed);
         pool.y_reserve = math_utils::safe_sub(pool.y_reserve, amm_output);
       } else {
         // SELL: Subtract SupraCoin, add pool tokens
         pool.x_reserve = math_utils::safe_sub(pool.x_reserve, amm_output);
-        pool.y_reserve = math_utils::safe_add(pool.y_reserve, pool_token_payment);
+        pool.y_reserve = math_utils::safe_add(pool.y_reserve, input_amount_fixed);
       };
       
       // Execute payment and token transfers
       let amm_output_regular = math_utils::from_fixed_point(amm_output);
       if (side) {
-        execute_buy_trade(trader_addr, admin_addr, supra_payment, (amm_output_regular as u64), pool.token_address);
+          execute_buy_trade(trader_addr, admin_addr, supra_payment, (amm_output_regular as u64), pool.token_address);
       } else {
-        execute_sell_trade(trader, trader_addr, admin_addr, pool_token_payment, (amm_output_regular as u64)); // Fix: pass trader signer
+        execute_sell_trade(trader, trader_addr, admin_addr, pool_token_payment, (amm_output_regular as u64));
       };
       
       // Update trader deviation
