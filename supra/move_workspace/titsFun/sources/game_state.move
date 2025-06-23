@@ -1,7 +1,7 @@
 // =============================================================================
 // GAME STATE MODULE
 // =============================================================================
-module your_addr::game_state {
+module tits_fun::game_state {
   use std::vector;
   use std::signer;
   use supra_framework::timestamp;
