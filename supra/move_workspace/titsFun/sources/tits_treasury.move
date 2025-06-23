@@ -1,4 +1,4 @@
-// =================== TREASURY MODULE ===================
+// =================== TREASURY MODULE (For Future Fees) ===================
 module deployer_addr::treasury {
   use std::error;
   use std::signer;
@@ -8,49 +8,36 @@ module deployer_addr::treasury {
   use supra_framework::timestamp;
   use supra_framework::event;
   use supra_framework::coin::{Self, Coin};
-  use deployer_addr::stable_coin::StableCoin;
-  use deployer_addr::curve_launcher::CurveParams;
-  use deployer_addr::pool_pair;
+  use supra_framework::supra_coin::SupraCoin;
 
   // ================= STRUCTS =================
   struct Treasury has key {
     admin: address,
-    total_coins_collected: u64,
-    total_tokens_collected: u64,
-    reserve_coins: Coin<StableCoin>,
-    reserve_tokens: u64,
-    collection_history: vector<Collection>,
-    locked_pool_count: u64,
+    total_fees_collected: u64,
+    reserve_coins: Coin<SupraCoin>,
+    fee_history: vector<FeeCollection>,
   }
 
-  struct Collection has store {
+  struct FeeCollection has store {
     pool_id: u64,
-    coins_amount: u64,
-    tokens_amount: u64,
+    fee_amount: u64,
+    fee_type: String, // "trading_fee", "creation_fee", etc.
     timestamp: u64,
   }
 
   // ================= EVENTS =================
   #[event]
-  struct FundsReceived has drop, store {
+  struct FeeCollected has drop, store {
     pool_id: u64,
-    coins_amount: u64,
-    tokens_amount: u64,
+    fee_amount: u64,
+    fee_type: String,
     timestamp: u64,
   }
 
   #[event]
-  struct FundsWithdrawn has drop, store {
+  struct FeeWithdrawn has drop, store {
     recipient: address,
-    coins_amount: u64,
-    tokens_amount: u64,
-    timestamp: u64,
-  }
-
-  #[event]
-  struct AutoPoolCreated has drop, store {
-    pool_id: u64,
-    scheduled_start: u64,
+    amount: u64,
     timestamp: u64,
   }
 
@@ -63,121 +50,75 @@ module deployer_addr::treasury {
     let admin_addr = signer::address_of(account);
     move_to(account, Treasury {
       admin: admin_addr,
-      total_coins_collected: 0,
-      total_tokens_collected: 0,
-      reserve_coins: coin::zero<StableCoin>(),
-      reserve_tokens: 0,
-      collection_history: vector::empty(),
-      locked_pool_count: 0,
+      total_fees_collected: 0,
+      reserve_coins: coin::zero<SupraCoin>(),
+      fee_history: vector::empty(),
     });
   }
 
   // ================= PUBLIC FUNCTIONS =================
-  public fun receive_all_locked_funds(
-    coins: Coin<StableCoin>,
-    tokens: u64,
+  public fun collect_fee(
+    fee_coins: Coin<SupraCoin>,
     pool_id: u64,
+    fee_type: String,
   ) acquires Treasury {
     let treasury = borrow_global_mut<Treasury>(@deployer_addr);
     
-    let coins_amount = coin::value(&coins);
-    
-    // 100% of funds go to admin immediately
-    coin::deposit(treasury.admin, coins);
-    
-    treasury.total_coins_collected = treasury.total_coins_collected + coins_amount;
-    treasury.total_tokens_collected = treasury.total_tokens_collected + tokens;
-    treasury.locked_pool_count = treasury.locked_pool_count + 1;
+    let fee_amount = coin::value(&fee_coins);
+    coin::merge(&mut treasury.reserve_coins, fee_coins);
+    treasury.total_fees_collected = treasury.total_fees_collected + fee_amount;
 
-    let collection = Collection {
+    let fee_record = FeeCollection {
       pool_id,
-      coins_amount,
-      tokens_amount: tokens,
+      fee_amount,
+      fee_type,
       timestamp: timestamp::now_seconds(),
     };
-    vector::push_back(&mut treasury.collection_history, collection);
+    vector::push_back(&mut treasury.fee_history, fee_record);
 
-    event::emit(FundsReceived {
+    event::emit(FeeCollected {
       pool_id,
-      coins_amount,
-      tokens_amount: tokens,
+      fee_amount,
+      fee_type,
       timestamp: timestamp::now_seconds(),
     });
   }
 
-  // 4. Treasury creates new pools (auto-deploy after locked pools)
-  public fun create_pool_from_treasury(
-    pool_id: u64,
-    token_name: String,
-    token_symbol: String,
-    params: CurveParams,
-    start_time: u64,
-  ) acquires Treasury {
-    let treasury = borrow_global<Treasury>(@deployer_addr);
-    
-    // Treasury acts as the pool creator
-    let treasury_signer = &create_signer_with_capability(&create_account_capability(treasury.admin));
-    
-    pool_pair::create_pool(
-      treasury_signer,
-      pool_id,
-      token_name,
-      token_symbol,
-      params,
-      start_time
-    );
-
-    event::emit(AutoPoolCreated {
-      pool_id,
-      scheduled_start: start_time,
-      timestamp: timestamp::now_seconds(),
-    });
-  }
-
-  public entry fun withdraw_remaining_funds(
+  public entry fun withdraw_fees(
     account: &signer,
-    coins_amount: u64,
-    tokens_amount: u64,
+    amount: u64,
   ) acquires Treasury {
     let admin = signer::address_of(account);
     let treasury = borrow_global_mut<Treasury>(@deployer_addr);
     
     assert!(treasury.admin == admin, error::permission_denied(ENOT_ADMIN));
-    assert!(coin::value(&treasury.reserve_coins) >= coins_amount, 
-            error::insufficient_funds(EINSUFFICIENT_FUNDS));
-    assert!(treasury.reserve_tokens >= tokens_amount, 
+    assert!(coin::value(&treasury.reserve_coins) >= amount, 
             error::insufficient_funds(EINSUFFICIENT_FUNDS));
 
-    if (coins_amount > 0) {
-      let withdrawal = coin::extract(&mut treasury.reserve_coins, coins_amount);
-      coin::deposit(admin, withdrawal);
-    };
+    let withdrawal = coin::extract(&mut treasury.reserve_coins, amount);
+    coin::deposit(admin, withdrawal);
 
-    treasury.reserve_tokens = treasury.reserve_tokens - tokens_amount;
-
-    event::emit(FundsWithdrawn {
+    event::emit(FeeWithdrawn {
       recipient: admin,
-      coins_amount,
-      tokens_amount,
+      amount,
       timestamp: timestamp::now_seconds(),
     });
   }
 
   // ================= VIEW FUNCTIONS =================
   #[view]
-  public fun get_treasury_balance(): (u64, u64) acquires Treasury {
+  public fun get_treasury_balance(): u64 acquires Treasury {
     let treasury = borrow_global<Treasury>(@deployer_addr);
-    (coin::value(&treasury.reserve_coins), treasury.reserve_tokens)
+    coin::value(&treasury.reserve_coins)
   }
 
   #[view]
-  public fun get_total_collected(): (u64, u64, u64) acquires Treasury {
-    let treasury = borrow_global<Treasury>(@deployer_addr);
-    (treasury.total_coins_collected, treasury.total_tokens_collected, treasury.locked_pool_count)
+  public fun get_total_fees_collected(): u64 acquires Treasury {
+    borrow_global<Treasury>(@deployer_addr).total_fees_collected
   }
 
   #[view]
-  public fun get_collection_history(): vector<Collection> acquires Treasury {
-    borrow_global<Treasury>(@deployer_addr).collection_history
+  public fun get_fee_history(): vector<FeeCollection> acquires Treasury {
+    borrow_global<Treasury>(@deployer_addr).fee_history
   }
 }
