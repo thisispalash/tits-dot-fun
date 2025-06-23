@@ -1,5 +1,5 @@
 supra/configs/*
 !supra/configs/supra_history
 supra-seeds
-
+flow-seeds
 node_modules
