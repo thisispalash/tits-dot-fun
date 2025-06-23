@@ -19,22 +19,23 @@ module deployer_addr::curve_launcher {
   // ================= CONSTANTS =================
   const POOL_DURATION_SECONDS: u64 = 86400; // 24 hours
   const MINUTES_PER_DAY: u64 = 1440;
+  const BASE_HEIGHT: u64 = 50; // Base height for curve calculation
 
   // ================= STRUCTS =================
   struct LauncherData has key {
     admin: address,
     current_pool_id: u64,
-    next_pool_start: u64,
+    last_pool_start: u64,
     active_pools: vector<u64>,
     completed_pools: vector<u64>,
     default_params: CurveParams,
   }
 
   struct CurveParams has store, copy, drop {
-    height: u64,              // H parameter for parabola (price scale)
+    height: u64,              // H parameter (auto-calculated from candle_count)
+    length: u64,              // L parameter = number of candles
     ticker_duration: u8,      // 5, 10, or 15 minutes per candle
     threshold_percent: u8,    // Deviation threshold (default 10%)
-    candle_count: u64,        // Number of candles (calculated from ticker_duration)
   }
 
   struct PoolInfo has store {
@@ -81,17 +82,20 @@ module deployer_addr::curve_launcher {
   // ================= INIT =================
   fun init_module(account: &signer) {
     let admin_addr = signer::address_of(account);
+    let candle_count = MINUTES_PER_DAY / 5; // Default 5min candles = 288
+    let height = calculate_height(candle_count);
+    
     let default_params = CurveParams {
-      height: 100,
+      height,
+      length: candle_count,
       ticker_duration: 5,
       threshold_percent: 10,
-      candle_count: 288, // 5-minute candles: 1440/5 = 288
     };
 
     move_to(account, LauncherData {
       admin: admin_addr,
       current_pool_id: 0,
-      next_pool_start: timestamp::now_seconds() + 300, // Start in 5 minutes
+      last_pool_start: 0,
       active_pools: vector::empty(),
       completed_pools: vector::empty(),
       default_params,
@@ -101,10 +105,9 @@ module deployer_addr::curve_launcher {
     // ================= PUBLIC FUNCTIONS =================
   public entry fun create_new_pool(
       account: &signer,
-      height: u64,
       ticker_duration: u8,
       threshold_percent: u8,
-      start_delay: u64, // seconds from now
+      start_delay: u64,
   ) acquires LauncherData {
     let launcher = borrow_global_mut<LauncherData>(@deployer_addr);
     
@@ -118,25 +121,31 @@ module deployer_addr::curve_launcher {
     launcher.current_pool_id = launcher.current_pool_id + 1;
     let pool_id = launcher.current_pool_id;
     
-    // Calculate candle count based on ticker duration
+    // Calculate L = number of candles
     let candle_count = MINUTES_PER_DAY / (ticker_duration as u64);
+    // Calculate H = height based on candle count
+    let height = calculate_height(candle_count);
     
     let token_name = generate_token_name(pool_id);
     let token_symbol = generate_token_symbol(pool_id);
 
     let params = CurveParams {
       height,
+      length: candle_count, // L = candles
       ticker_duration,
       threshold_percent,
-      candle_count,
     };
 
-    let pool_start = timestamp::now_seconds() + start_delay;
+    let pool_start = if (launcher.last_pool_start == 0) {
+      timestamp::now_seconds() + start_delay
+    } else {
+      launcher.last_pool_start + POOL_DURATION_SECONDS // Exactly 24h spacing
+    };
     
     pool_pair::create_pool(account, pool_id, token_name, token_symbol, params, pool_start);
     
     vector::push_back(&mut launcher.active_pools, pool_id);
-    launcher.next_pool_start = pool_start + POOL_DURATION_SECONDS;
+    launcher.last_pool_start = pool_start;
 
     event::emit(PoolCreated {
       pool_id,
@@ -166,9 +175,9 @@ module deployer_addr::curve_launcher {
       final_volume: volume,
     });
 
-    // If pool was locked, schedule new pool creation 24h later via treasury
+    // If pool was locked, schedule new pool creation exactly 24h after this pool started
     if (was_locked) {
-      let next_start = launcher.next_pool_start;
+      let next_start = launcher.last_pool_start + POOL_DURATION_SECONDS;
       move_to(account, PendingVRF { 
         pool_id, 
         caller: signer::address_of(account),
@@ -202,35 +211,38 @@ module deployer_addr::curve_launcher {
     let pending = move_from<PendingVRF>(caller_address);
     let launcher = borrow_global_mut<LauncherData>(@deployer_addr);
     
-    // Wait until scheduled time (24h after original pool start)
+    // Wait until scheduled time
     assert!(timestamp::now_seconds() >= pending.scheduled_start, error::permission_denied(ETOO_EARLY));
     
     // Generate random parameters
-    let height = (*vector::borrow(&random_numbers, 0) % 150) + 50; // 50-200 range
-    let ticker_idx = *vector::borrow(&random_numbers, 1) % 3;
+    let ticker_idx = *vector::borrow(&random_numbers, 0) % 3;
     let ticker_duration = if (ticker_idx == 0) 5 else if (ticker_idx == 1) 10 else 15;
-    let threshold = (*vector::borrow(&random_numbers, 2) % 20) + 5; // 5-25% range
+    let threshold = (*vector::borrow(&random_numbers, 1) % 20) + 5; // 5-25%
+    let height_multiplier = (*vector::borrow(&random_numbers, 2) % 50) + 75; // 75-125% of base
     
     launcher.current_pool_id = launcher.current_pool_id + 1;
     let pool_id = launcher.current_pool_id;
     
     let candle_count = MINUTES_PER_DAY / (ticker_duration as u64);
+    let base_height = calculate_height(candle_count);
+    let height = (base_height * height_multiplier) / 100; // Apply randomization
+    
     let token_name = generate_token_name(pool_id);
     let token_symbol = generate_token_symbol(pool_id);
 
     let params = CurveParams {
       height,
+      length: candle_count,
       ticker_duration,
       threshold_percent: (threshold as u8),
-      candle_count,
     };
 
     let pool_start = pending.scheduled_start;
     
-    // Treasury creates the new pool
+    // Treasury creates the new pool (this function needs to be implemented)
     treasury::create_pool_from_treasury(pool_id, token_name, token_symbol, params, pool_start);
     vector::push_back(&mut launcher.active_pools, pool_id);
-    launcher.next_pool_start = pool_start + POOL_DURATION_SECONDS;
+    launcher.last_pool_start = pool_start;
 
     event::emit(PoolCreated {
       pool_id,
@@ -238,11 +250,29 @@ module deployer_addr::curve_launcher {
       token_symbol,
       params,
       start_time: pool_start,
-      creator: @deployer_addr, // Treasury is the creator
+      creator: @deployer_addr, // Treasury is creator
     });
   }
 
   // ================= HELPER FUNCTIONS =================
+  fun calculate_height(candle_count: u64): u64 {
+    // H = BASE_HEIGHT * sqrt(candle_count)
+    // This gives: 5min(288)→849, 10min(144)→600, 15min(96)→490
+    let sqrt_approx = integer_sqrt(candle_count);
+    BASE_HEIGHT * sqrt_approx
+  }
+
+  fun integer_sqrt(x: u64): u64 {
+    if (x == 0) return 0;
+    let mut z = (x + 1) / 2;
+    let mut y = x;
+    while (z < y) {
+      y = z;
+      z = (x / z + z) / 2;
+    };
+    y
+  }
+
   fun generate_token_name(pool_id: u64): String {
     let base = string::utf8(b"Curve Pool ");
     let id_str = u64_to_string(pool_id);
@@ -299,7 +329,12 @@ module deployer_addr::curve_launcher {
   }
 
   #[view]
-  public fun get_next_pool_start(): u64 acquires LauncherData {
-    borrow_global<LauncherData>(@deployer_addr).next_pool_start
+  public fun get_last_pool_start(): u64 acquires LauncherData {
+    borrow_global<LauncherData>(@deployer_addr).last_pool_start
+  }
+
+  #[view]
+  public fun calculate_expected_candle_count(ticker_duration: u8): u64 {
+    MINUTES_PER_DAY / (ticker_duration as u64)
   }
 }

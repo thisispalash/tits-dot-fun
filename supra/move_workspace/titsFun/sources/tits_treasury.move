@@ -9,6 +9,8 @@ module deployer_addr::treasury {
   use supra_framework::event;
   use supra_framework::coin::{Self, Coin};
   use deployer_addr::stable_coin::StableCoin;
+  use deployer_addr::curve_launcher::CurveParams;
+  use deployer_addr::pool_pair;
 
   // ================= STRUCTS =================
   struct Treasury has key {
@@ -46,10 +48,9 @@ module deployer_addr::treasury {
   }
 
   #[event]
-  struct AdminRewardDistributed has drop, store {
-    admin: address,
-    coins_amount: u64,
-    tokens_amount: u64,
+  struct AutoPoolCreated has drop, store {
+    pool_id: u64,
+    scheduled_start: u64,
     timestamp: u64,
   }
 
@@ -72,7 +73,7 @@ module deployer_addr::treasury {
   }
 
   // ================= PUBLIC FUNCTIONS =================
-  public fun receive_locked_funds(
+  public fun receive_all_locked_funds(
     coins: Coin<StableCoin>,
     tokens: u64,
     pool_id: u64,
@@ -80,8 +81,9 @@ module deployer_addr::treasury {
     let treasury = borrow_global_mut<Treasury>(@deployer_addr);
     
     let coins_amount = coin::value(&coins);
-    coin::merge(&mut treasury.reserve_coins, coins);
-    treasury.reserve_tokens = treasury.reserve_tokens + tokens;
+    
+    // 100% of funds go to admin immediately
+    coin::deposit(treasury.admin, coins);
     
     treasury.total_coins_collected = treasury.total_coins_collected + coins_amount;
     treasury.total_tokens_collected = treasury.total_tokens_collected + tokens;
@@ -95,28 +97,39 @@ module deployer_addr::treasury {
     };
     vector::push_back(&mut treasury.collection_history, collection);
 
-    // Automatically transfer 50% to admin as reward for maintaining the system
-    let admin_coin_reward = coins_amount / 2;
-    let admin_token_reward = tokens / 2;
-    
-    if (admin_coin_reward > 0) {
-      let admin_coins = coin::extract(&mut treasury.reserve_coins, admin_coin_reward);
-      coin::deposit(treasury.admin, admin_coins);
-    };
-    
-    treasury.reserve_tokens = treasury.reserve_tokens - admin_token_reward;
-
     event::emit(FundsReceived {
       pool_id,
       coins_amount,
       tokens_amount: tokens,
       timestamp: timestamp::now_seconds(),
     });
+  }
 
-    event::emit(AdminRewardDistributed {
-      admin: treasury.admin,
-      coins_amount: admin_coin_reward,
-      tokens_amount: admin_token_reward,
+  // 4. Treasury creates new pools (auto-deploy after locked pools)
+  public fun create_pool_from_treasury(
+    pool_id: u64,
+    token_name: String,
+    token_symbol: String,
+    params: CurveParams,
+    start_time: u64,
+  ) acquires Treasury {
+    let treasury = borrow_global<Treasury>(@deployer_addr);
+    
+    // Treasury acts as the pool creator
+    let treasury_signer = &create_signer_with_capability(&create_account_capability(treasury.admin));
+    
+    pool_pair::create_pool(
+      treasury_signer,
+      pool_id,
+      token_name,
+      token_symbol,
+      params,
+      start_time
+    );
+
+    event::emit(AutoPoolCreated {
+      pool_id,
+      scheduled_start: start_time,
       timestamp: timestamp::now_seconds(),
     });
   }
