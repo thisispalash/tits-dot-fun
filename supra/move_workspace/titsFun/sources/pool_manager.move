@@ -32,7 +32,6 @@ module tits_fun::pool_manager {
       is_locked: bool,
       total_trades: u64,
       trader_deviations: vector<TraderDeviation>,
-      winner_gas_paid: u64,
       current_winner: address,
       winner_proposed_delay: u64,
       winner_proposed_candle_size: u64,
@@ -60,6 +59,11 @@ module tits_fun::pool_manager {
       current_pool_id: u64,
       admin: address,
       previous_h_values: vector<u128>, // Track H values (fixed-point)
+      // Queue for next pool
+      queued_pool_start_time: u64,
+      queued_pool_delay: u64,
+      queued_pool_candle_size: u64,
+      queued_pool_winner: address, // @0x0 if locked, actual winner if time expired
     }
     
     struct PendingVRF has key {
@@ -133,14 +137,17 @@ module tits_fun::pool_manager {
         current_pool_id: 0,
         admin: signer::address_of(admin),
         previous_h_values: vector::empty<u128>(),
+        queued_pool_start_time: 0,
+        queued_pool_delay: 0,
+        queued_pool_candle_size: 0,
+        queued_pool_winner: @0x0,
       });
     }
     
     public entry fun create_pool(
       admin: &signer,
       l_value: u64,
-      delay_seconds: u64,
-      winner_gas_paid: u64
+      delay_seconds: u64
     ) acquires PoolRegistry {
       let admin_addr = signer::address_of(admin);
       let registry = borrow_global_mut<PoolRegistry>(admin_addr);
@@ -198,7 +205,6 @@ module tits_fun::pool_manager {
         is_locked: false,
         total_trades: 0,
         trader_deviations: vector::empty<TraderDeviation>(),
-        winner_gas_paid,
         current_winner: @0x0,
         winner_proposed_delay: 0,
         winner_proposed_candle_size: 0,
@@ -462,7 +468,7 @@ module tits_fun::pool_manager {
       caller_address: address,
       rng_count: u8,
       client_seed: u64,
-    ) acquires PendingVRF {
+    ) acquires PendingVRF, Pool, PoolRegistry {
       let random_numbers = supra_vrf::verify_callback(
         nonce, message, signature, caller_address, rng_count, client_seed
       );
@@ -482,9 +488,14 @@ module tits_fun::pool_manager {
       };
       
       let random_delay = 0; // Always 0 for locked pools
-      
-      // Calculate corresponding L value: L = 24 * 60 / candle_size  
       let random_l_value = (24 * 60) / random_candle_size;
+      
+      // Get the locked pool's start time to schedule next pool
+      let pool = borrow_global<Pool>(caller_address);
+      queue_next_pool(&signer::create_signer(caller_address), @0x0, random_delay, random_candle_size, pool.start_time);
+      
+      // Remove from active pools
+      complete_pool(&signer::create_signer(caller_address), pending.pool_id);
       
       // Emit event for automation to create next pool with random parameters
       event::emit(PoolLockedWithRandomParams {
@@ -564,5 +575,90 @@ module tits_fun::pool_manager {
       };
       
       0 // Return 0 if trader not found
+    }
+    
+    // Queue next pool with winner's parameters or random parameters
+    public fun queue_next_pool(
+      admin: &signer,
+      winner: address,
+      delay: u64,
+      candle_size: u64,
+      current_pool_start: u64
+    ) acquires PoolRegistry {
+      let registry = borrow_global_mut<PoolRegistry>(signer::address_of(admin));
+      registry.queued_pool_start_time = current_pool_start + 24 * 3600; // 24h after current pool start
+      registry.queued_pool_delay = delay;
+      registry.queued_pool_candle_size = candle_size;
+      registry.queued_pool_winner = winner;
+    }
+    
+    #[view]
+    public fun get_queued_pool_info(admin: address): (u64, u64, u64, address) acquires PoolRegistry {
+      let registry = borrow_global<PoolRegistry>(admin);
+      (registry.queued_pool_start_time, registry.queued_pool_delay, registry.queued_pool_candle_size, registry.queued_pool_winner)
+    }
+    
+    #[view]
+    public fun has_active_pool(admin: address): bool acquires PoolRegistry {
+      let registry = borrow_global<PoolRegistry>(admin);
+      !vector::is_empty(&registry.pools)
+    }
+    
+    #[view]
+    public fun get_current_active_pool_id(admin: address): u64 acquires PoolRegistry {
+      let registry = borrow_global<PoolRegistry>(admin);
+      if (vector::is_empty(&registry.pools)) {
+        0
+      } else {
+        *vector::borrow(&registry.pools, vector::length(&registry.pools) - 1)
+      }
+    }
+
+    public fun clear_queue(admin: &signer) acquires PoolRegistry {
+      let registry = borrow_global_mut<PoolRegistry>(signer::address_of(admin));
+      registry.queued_pool_start_time = 0;
+      registry.queued_pool_delay = 0;
+      registry.queued_pool_candle_size = 0;
+      registry.queued_pool_winner = @0x0;
+    }
+
+    public fun complete_pool(admin: &signer, pool_id: u64) acquires PoolRegistry {
+      let registry = borrow_global_mut<PoolRegistry>(signer::address_of(admin));
+      let (found, index) = vector::index_of(&registry.pools, &pool_id);
+      if (found) {
+        vector::remove(&mut registry.pools, index);
+      };
+    }
+
+    #[view]
+    public fun get_pool_start_time(admin: address, pool_id: u64): u64 acquires Pool {
+      let pool = borrow_global<Pool>(admin);
+      pool.start_time
+    }
+
+    #[view] 
+    public fun get_winner_proposal(admin: address, pool_id: u64): (u64, u64) acquires Pool {
+      let pool = borrow_global<Pool>(admin);
+      (pool.winner_proposed_delay, pool.winner_proposed_candle_size)
+    }
+
+    #[view]
+    public fun get_max_trader_deviation(admin: address, pool_id: u64): u128 acquires Pool {
+      let pool = borrow_global<Pool>(admin);
+      let trader_deviations = &pool.trader_deviations;
+      let len = vector::length(trader_deviations);
+      
+      if (len == 0) return 0;
+      
+      let mut max_deviation = 0u128;
+      let mut i = 0;
+      while (i < len) {
+        let trader_dev = vector::borrow(trader_deviations, i);
+        if (trader_dev.deviation > max_deviation) {
+          max_deviation = trader_dev.deviation;
+        };
+        i = i + 1;
+      };
+      max_deviation
     }
 }
