@@ -4,7 +4,7 @@ version = "1.0.0"
 authors = []
 
 [addresses]
-hello_blockchain ="0x5d9e5ddecdcaf31b27ccf90970574d4001fe819928bc811a9279347fc769ffb8"
+hello_blockchain = "0x5d9e5ddecdcaf31b27ccf90970574d4001fe819928bc811a9279347fc769ffb8"
 
 [dev-addresses]
 
