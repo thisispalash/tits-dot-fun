@@ -1,4 +1,5 @@
-supra/configs
+supra/configs/*
+!supra/configs/supra_history
 supra-seeds
 
 node_modules
