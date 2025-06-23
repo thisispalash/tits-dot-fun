@@ -255,7 +255,6 @@ module tits_fun::pool_manager {
       candle_size: u64,        // Proposed candle size for next pool
       supra_amount: u64
     ) acquires Pool {
-      let supra_payment = coin::withdraw<SupraCoin>(trader, supra_amount);
       let trader_addr = signer::address_of(trader);
       let pool = borrow_global_mut<Pool>(admin_addr);
       
@@ -267,8 +266,22 @@ module tits_fun::pool_manager {
       let now = timestamp::now_seconds();
       assert!(now >= pool.start_time && now <= pool.end_time, error::invalid_state(EPOOL_EXPIRED));
       assert!(delay <= 12 * 3600, error::invalid_argument(EINVALID_DELAY));
-      
-      let quantity_fixed = math_utils::to_fixed_point((quantity as u128)); // Fix: cast to u128
+
+      // Convert input quantity to fixed point for AMM calculations
+      let quantity_fixed = math_utils::to_fixed_point((quantity as u128));
+
+      // Handle payments based on trade direction
+      let supra_payment;
+      let pool_token_payment;
+      if (side) {
+        // BUY: trader provides SupraCoin
+        supra_payment = coin::withdraw<SupraCoin>(trader, supra_amount);
+        pool_token_payment = option::none(); // Not needed for buy
+      } else {
+        // SELL: trader provides pool tokens
+        supra_payment = option::none(); // Not needed for sell
+        pool_token_payment = coin::withdraw<token_factory::PoolToken>(trader, quantity);
+      };
       
       // Ensure reserves are not zero
       assert!(pool.x_reserve > 0 && pool.y_reserve > 0, error::invalid_state(EZERO_RESERVES));
@@ -314,20 +327,20 @@ module tits_fun::pool_manager {
       // Update reserves based on trade direction
       if (side) {
         // BUY: Add SupraCoin, subtract pool tokens
-        pool.x_reserve = math_utils::safe_add(pool.x_reserve, quantity_fixed);
+        pool.x_reserve = math_utils::safe_add(pool.x_reserve, supra_payment);
         pool.y_reserve = math_utils::safe_sub(pool.y_reserve, amm_output);
       } else {
         // SELL: Subtract SupraCoin, add pool tokens
         pool.x_reserve = math_utils::safe_sub(pool.x_reserve, amm_output);
-        pool.y_reserve = math_utils::safe_add(pool.y_reserve, quantity_fixed);
+        pool.y_reserve = math_utils::safe_add(pool.y_reserve, pool_token_payment);
       };
       
       // Execute payment and token transfers
       let amm_output_regular = math_utils::from_fixed_point(amm_output);
       if (side) {
-        execute_buy_trade(trader_addr, admin_addr, supra_payment, (amm_output_regular as u64), pool.token_address); // Fix: pass correct params
+        execute_buy_trade(trader_addr, admin_addr, supra_payment, (amm_output_regular as u64), pool.token_address);
       } else {
-        execute_sell_trade(trader, trader_addr, admin_addr, supra_payment, (amm_output_regular as u64)); // Fix: pass trader signer
+        execute_sell_trade(trader, trader_addr, admin_addr, pool_token_payment, (amm_output_regular as u64)); // Fix: pass trader signer
       };
       
       // Update trader deviation
@@ -373,21 +386,21 @@ module tits_fun::pool_manager {
     fun execute_buy_trade(
       trader_addr: address,
       admin_addr: address,
-      supra_payment: Coin<SupraCoin>, // Fix: make mutable
-      amm_output_regular: u64, // Fix: use u64
+      supra_payment: Coin<SupraCoin>,
+      amm_output_regular: u64,
       token_address: address
     ) {
       // Handle SupraCoin payment with fees
       let payment_value = coin::value(&supra_payment);
       let fee_amount = (payment_value * FEE_BASIS_POINTS) / 10000;
-      let fee_coin = coin::extract(&mut supra_payment, fee_amount); // Fix: coin::extract returns single value
+      let fee_coin = coin::extract(&mut supra_payment, fee_amount);
       
       // Send fee to treasury and deposit net payment
       tits_treasury::collect_fees(admin_addr, fee_amount, fee_coin);
       coin::deposit(admin_addr, supra_payment); // supra_payment now contains net amount
       
-      // Mint and transfer pool tokens to trader
-      let pool_tokens = token_factory::mint_tokens(token_address, amm_output_regular); // Fix: remove admin param
+      // Withdraw pool tokens from admin and send to trader
+      let pool_tokens = coin::withdraw<token_factory::PoolToken>(admin_addr, amm_output_regular);
       coin::deposit(trader_addr, pool_tokens);
     }
     
@@ -396,21 +409,22 @@ module tits_fun::pool_manager {
       trader: &signer,
       trader_addr: address,
       admin_addr: address,
-      pool_token_payment: Coin<SupraCoin>, // This should be pool tokens, but keeping for now
-      amm_output_regular: u64 // Fix: use u64
+      pool_token_payment: Coin<token_factory::PoolToken>, // Fix: use correct token type
+      amm_output_regular: u64
     ) {
       // Calculate fees and net output
       let fee_amount = (amm_output_regular * FEE_BASIS_POINTS) / 10000;
       let net_output = amm_output_regular - fee_amount;
       
-      // Withdraw SupraCoin from trader's account to pay them
-      let output_coin = coin::withdraw<SupraCoin>(trader, net_output);
+      // Withdraw SupraCoin from admin to pay the trader
+      let output_coin = coin::withdraw<SupraCoin>(admin_addr, net_output);
       coin::deposit(trader_addr, output_coin);
       
-      let fee_coin = coin::withdraw<SupraCoin>(trader, fee_amount);
+      // Handle fee payment in SupraCoin
+      let fee_coin = coin::withdraw<SupraCoin>(admin_addr, fee_amount);
       tits_treasury::collect_fees(admin_addr, fee_amount, fee_coin);
       
-      // Handle pool token input (deposit the pool tokens to admin)
+      // Deposit pool tokens from trader to admin
       coin::deposit(admin_addr, pool_token_payment);
     }
     
