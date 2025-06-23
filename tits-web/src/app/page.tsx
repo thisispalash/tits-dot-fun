@@ -8,6 +8,8 @@ import cn from '@/util/cn';
 import { useSupra } from '@/context/SupraProvider';
 import { useWeb3 } from '@/context/Web3Providers';
 
+import WalletButton from '@/component/WalletButton';
+
 export default function Home() {
 
   const { hasStarkey, getPoolTokenBalance, getSupraBalance, connect } = useSupra();
@@ -44,15 +46,7 @@ export default function Home() {
           Faucet
         </div>
 
-        <div className={cn(
-          'flex flex-row',
-          'items-center justify-between',
-        )}>
-          {getShortAddress()}
-        </div>
-
-
-
+        <WalletButton />
 
       </div>
 
