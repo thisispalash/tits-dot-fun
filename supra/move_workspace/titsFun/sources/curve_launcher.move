@@ -14,6 +14,7 @@ module deployer_addr::curve_launcher {
   use supra_addr::supra_vrf;
   use deployer_addr::pool_pair;
   use deployer_addr::treasury;
+  use deployer_addr::token_factory;
 
   // ================= STRUCTS =================
   struct LauncherData has key {
@@ -52,6 +53,8 @@ module deployer_addr::curve_launcher {
   #[event]
   struct PoolCreated has drop, store {
     pool_id: u64,
+    token_name: String,
+    token_symbol: String,
     params: CurveParams,
     start_time: u64,
     creator: address,
@@ -101,7 +104,7 @@ module deployer_addr::curve_launcher {
       threshold_percent: u8,
       start_delay: u64, // seconds from now
   ) acquires LauncherData {
-    let launcher = borrow_global_mut<LauncherData>(signer::address_of(account));
+    let launcher = borrow_global_mut<LauncherData>(@deployer_addr);
     
     // Validate parameters
     assert!(ticker_duration == 5 || ticker_duration == 10 || ticker_duration == 15, 
@@ -109,6 +112,13 @@ module deployer_addr::curve_launcher {
     assert!(threshold_percent > 0 && threshold_percent <= 50, 
             error::invalid_argument(EINVALID_PARAMS));
     assert!(start_delay <= 86400, error::invalid_argument(EINVALID_PARAMS)); // Max 24h delay
+
+    launcher.current_pool_id = launcher.current_pool_id + 1;
+    let pool_id = launcher.current_pool_id;
+    
+    // Generate incremental token name and symbol
+    let token_name = generate_token_name(pool_id);
+    let token_symbol = generate_token_symbol(pool_id);
 
     let params = CurveParams {
       height,
@@ -119,16 +129,17 @@ module deployer_addr::curve_launcher {
     };
 
     let pool_start = timestamp::now_seconds() + start_delay;
-    launcher.current_pool_id = launcher.current_pool_id + 1;
     
-    // Create the actual trading pool
-    pool_pair::create_pool(account, launcher.current_pool_id, params, pool_start);
+    // Create the trading pool with incremental token
+    pool_pair::create_pool(account, pool_id, token_name, token_symbol, params, pool_start);
     
-    vector::push_back(&mut launcher.active_pools, launcher.current_pool_id);
+    vector::push_back(&mut launcher.active_pools, pool_id);
     launcher.next_pool_start = pool_start + 86400;
 
     event::emit(PoolCreated {
-      pool_id: launcher.current_pool_id,
+      pool_id,
+      token_name,
+      token_symbol,
       params,
       start_time: pool_start,
       creator: signer::address_of(account),
@@ -136,7 +147,7 @@ module deployer_addr::curve_launcher {
   }
 
   public entry fun complete_pool(account: &signer, pool_id: u64) acquires LauncherData {
-    let launcher = borrow_global_mut<LauncherData>(signer::address_of(account));
+    let launcher = borrow_global_mut<LauncherData>(@deployer_addr);
     
     // Remove from active pools
     let (found, index) = vector::index_of(&launcher.active_pools, &pool_id);
@@ -182,8 +193,8 @@ module deployer_addr::curve_launcher {
       nonce, message, signature, caller_address, rng_count, client_seed
     );
     
-    let pending = move_from<PendingVRF>(caller_address);
-    let launcher = borrow_global_mut<LauncherData>(caller_address);
+    let _pending = move_from<PendingVRF>(caller_address);
+    let launcher = borrow_global_mut<LauncherData>(@deployer_addr);
     
     // Generate random parameters from VRF
     let height = (*vector::borrow(&random_numbers, 0) % 150) + 50; // 50-200 range
@@ -191,6 +202,13 @@ module deployer_addr::curve_launcher {
     let ticker_idx = *vector::borrow(&random_numbers, 2) % 3;
     let ticker_duration = if (ticker_idx == 0) 5 else if (ticker_idx == 1) 10 else 15;
     
+    launcher.current_pool_id = launcher.current_pool_id + 1;
+    let pool_id = launcher.current_pool_id;
+    
+    // Generate incremental token name and symbol
+    let token_name = generate_token_name(pool_id);
+    let token_symbol = generate_token_symbol(pool_id);
+
     let params = CurveParams {
       height,
       length,
@@ -199,30 +217,76 @@ module deployer_addr::curve_launcher {
       pool_duration: 86400,
     };
 
-    // Create new pool with random parameters
-    launcher.current_pool_id = launcher.current_pool_id + 1;
     let pool_start = launcher.next_pool_start;
     
-    pool_pair::create_pool_from_launcher(launcher.current_pool_id, params, pool_start);
-    vector::push_back(&mut launcher.active_pools, launcher.current_pool_id);
+    pool_pair::create_pool_from_launcher(pool_id, token_name, token_symbol, params, pool_start);
+    vector::push_back(&mut launcher.active_pools, pool_id);
     launcher.next_pool_start = pool_start + 86400;
 
     event::emit(PoolCreated {
-      pool_id: launcher.current_pool_id,
+      pool_id,
+      token_name,
+      token_symbol,
       params,
       start_time: pool_start,
       creator: caller_address,
     });
   }
 
+  // ================= HELPER FUNCTIONS =================
+  fun generate_token_name(pool_id: u64): String {
+    let base = string::utf8(b"Curve Pool ");
+    let id_str = u64_to_string(pool_id);
+    string::append(&mut base, id_str);
+    base
+  }
+
+  fun generate_token_symbol(pool_id: u64): String {
+    let base = string::utf8(b"CURVE");
+    let id_str = format_pool_id(pool_id);
+    string::append(&mut base, id_str);
+    base
+  }
+
+  fun format_pool_id(pool_id: u64): String {
+    // Format as 3-digit number: 001, 002, etc.
+    if (pool_id < 10) {
+      let result = string::utf8(b"00");
+      string::append(&mut result, u64_to_string(pool_id));
+      result
+    } else if (pool_id < 100) {
+      let result = string::utf8(b"0");
+      string::append(&mut result, u64_to_string(pool_id));
+      result
+    } else {
+      u64_to_string(pool_id)
+    }
+  }
+
+  fun u64_to_string(num: u64): String {
+    if (num == 0) return string::utf8(b"0");
+    
+    let digits = vector::empty<u8>();
+    let temp = num;
+    
+    while (temp > 0) {
+      let digit = ((temp % 10) as u8) + 48; // Convert to ASCII
+      vector::push_back(&mut digits, digit);
+      temp = temp / 10;
+    };
+    
+    vector::reverse(&mut digits);
+    string::utf8(digits)
+  }
+
   // ================= VIEW FUNCTIONS =================
   #[view]
-  public fun get_active_pools(launcher_addr: address): vector<u64> acquires LauncherData {
-    borrow_global<LauncherData>(launcher_addr).active_pools
+  public fun get_active_pools(): vector<u64> acquires LauncherData {
+    borrow_global<LauncherData>(@deployer_addr).active_pools
   }
 
   #[view]
-  public fun get_current_pool_id(launcher_addr: address): u64 acquires LauncherData {
-    borrow_global<LauncherData>(launcher_addr).current_pool_id
+  public fun get_current_pool_id(): u64 acquires LauncherData {
+    borrow_global<LauncherData>(@deployer_addr).current_pool_id
   }
 }
