@@ -40,10 +40,19 @@ contract TittyPoolFactory is Ownable {
   
   constructor(address initialOwner) Ownable(initialOwner) {}
   
+  // Public function to create pool
   function createPool(
     uint256 lValue,
     uint256 delaySeconds
   ) external onlyOwner returns (address) {
+    return _createPool(lValue, delaySeconds);
+  }
+  
+  // Internal function that does the actual pool creation
+  function _createPool(
+    uint256 lValue,
+    uint256 delaySeconds
+  ) internal returns (address) {
     require(lValue == 96 || lValue == 144 || lValue == 288, "Invalid L value");
     require(delaySeconds <= 12 hours, "Delay too long");
     
@@ -124,7 +133,7 @@ contract TittyPoolFactory is Ownable {
     require(lValue == 96 || lValue == 144 || lValue == 288, "Invalid L value");
     require(delaySeconds <= 12 hours, "Delay too long");
     
-    return createPool(lValue, delaySeconds);
+    return _createPool(lValue, delaySeconds);
   }
   
   function createPoolWithRandomParams(
@@ -143,7 +152,7 @@ contract TittyPoolFactory is Ownable {
       block.timestamp
     );
     
-    return createPool(randomLValue, randomDelay);
+    return _createPool(randomLValue, randomDelay);
   }
   
   // Helper function to convert uint to string
@@ -173,7 +182,11 @@ contract TittyPoolFactory is Ownable {
   }
   
   function getAllDeployedPools() external view returns (address[] memory) {
-    return deployedPools;
+    address[] memory poolAddresses = new address[](deployedPools.length);
+    for (uint256 i = 0; i < deployedPools.length; i++) {
+      poolAddresses[i] = address(deployedPools[i]);
+    }
+    return poolAddresses;
   }
   
   function getDeployedPoolCount() external view returns (uint256) {

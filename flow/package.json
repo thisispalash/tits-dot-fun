@@ -1,5 +1,12 @@
 {
   "name": "hardhat-project",
+  "scripts": {
+    "compile": "hardhat compile",
+    "deploy": "hardhat run scripts/deploy.ts",
+    "deploy:testnet": "hardhat run scripts/deploy.ts --network flowTestnet",
+    "verify": "hardhat run scripts/verify.ts",
+    "verify:testnet": "hardhat run scripts/verify.ts --network flowTestnet"
+  },
   "devDependencies": {
     "@nomicfoundation/hardhat-ethers": "^3.0.9",
     "@nomicfoundation/hardhat-toolbox-viem": "^4.0.0",

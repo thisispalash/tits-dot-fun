@@ -1,0 +1,8 @@
+{
+  "treasury": "0x8cCc681207aB06BC06EdcF9a9d1f10aafc3D319F",
+  "factory": "0x004bb5E37b305aAae08B578507e9Ec452de32f42",
+  "tokenFactory": "0xa0c4CeBa57F26417B8D17B656Ae6dB3B20ec8FFf",
+  "network": "flowTestnet",
+  "deployer": "0x96e03e38aD4B5EF728f4C5F305eddBB509B652d0",
+  "timestamp": "2025-06-24T00:47:46.308Z"
+}
