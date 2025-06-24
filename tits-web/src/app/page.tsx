@@ -1,29 +1,18 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useState } from 'react';
 
 import cn from '@/util/cn';
+import { generateUniqueNameFromTimestamp } from '@/util/uniqueName';
 
-
-import { useSupra } from '@/context/SupraProvider';
-import { useWeb3 } from '@/context/Web3Providers';
 
 import WalletButton from '@/component/WalletButton';
+import { ConnectButton } from '@rainbow-me/rainbowkit';
 
 export default function Home() {
 
-  const { hasStarkey, getPoolTokenBalance, getSupraBalance, connect } = useSupra();
-  const { getShortAddress } = useWeb3();
-
-  useEffect(() => {
-
-    if (hasStarkey) {
-      getPoolTokenBalance().then(console.log);
-      getSupraBalance().then(console.log);
-      console.log(getShortAddress());
-      connect();
-    }
-  }, [hasStarkey]);
+  const [ name, setName ] = useState(generateUniqueNameFromTimestamp);
+  // const { getShortAddress } = useWeb3();
 
 
   return (
@@ -43,7 +32,7 @@ export default function Home() {
         <div className={cn(
           ''
         )}>
-          Faucet
+          {name}
         </div>
 
         <WalletButton />

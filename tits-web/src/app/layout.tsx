@@ -32,7 +32,7 @@ export default function RootLayout({
           'antialiased font-default',
         )}
       >
-        <Web3Providers>
+        <Web3Providers cookies={null}>
           <AppProvider>
             {children}
           </AppProvider>

@@ -1,55 +1,68 @@
-'use client';
+'use client'
 
-import { createContext, useContext, useState } from 'react';
+import React, { type ReactNode } from 'react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { cookieToInitialState, WagmiProvider, type Config } from 'wagmi'
 
-import SupraProvider from './SupraProvider';
-import FlowProvider from './FlowProvider';
+import { createAppKit } from '@reown/appkit'
 
-interface Web3ProvidersContextType {
-  address: string | null;
-  setAddress: (address: string | null) => void;
-  chain: string | null;
-  setChain: (chain: 'supra' | 'flow') => void;
-  getShortAddress: () => string;
+import { wagmiAdapter, projectId, networks } from '@/util/wagmi'
+import { flowTestnet } from 'wagmi/chains'
+
+if (!projectId) {
+  throw new Error('Project ID is not defined')
 }
 
-const Web3ProvidersContext = createContext<Web3ProvidersContextType | null>(null);
+// Set up metadata
+const metadata = {
+  name: 'tits dot [dot] fun',
+  description: 'Can humanity coordinate?',
+  url: 'http://localhost:3000', // origin must match your domain & subdomain
+  icons: []
+}
 
+// Create the modal
+export const modal = createAppKit({
+  adapters: [wagmiAdapter],
+  projectId,
+  networks,
+  defaultNetwork: flowTestnet,
+  metadata: metadata,
+  enableWalletConnect: false,
+  features: {
+    analytics: true,
+    swaps: false,
+    connectMethodsOrder: ['wallet', 'social', 'email'],
+  },
+  includeWalletIds: [
+    'c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96', // MetaMask
+    '19177a98252e07ddfc9af2083ba8e07ef627cb6103467ffebb3f8f4205fd7927', // Ledger
+    'fd20dc426fb37566d803205b19bbc1d4096b248ac04548e3cfb6b3a38bd033aa', // Coinbase
+  ],
+  featuredWalletIds: [
+    'c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96', // MetaMask
+  ],
+  allWallets: 'ONLY_MOBILE',
+  themeMode: 'dark',
+  themeVariables: {
+    '--w3m-font-family': 'var(--font-default)',
+    '--w3m-accent': 'var(--background)',
+    '--w3m-color-mix': 'var(--background)',
+    '--w3m-color-mix-strength': 10
+  },
+});
 
-export default function Web3Providers({ children }: { children: React.ReactNode }) {
+// Set up queryClient
+const queryClient = new QueryClient()
 
-  const [ address, setAddress ] = useState<string|null>(null);
-  const [ chain, setChain ] = useState<'supra'|'flow'>('supra');
-
-  const getShortAddress = () => {
-    if (!address) return '';
-    return address.slice(0, 6) + '..' + address.slice(-4);
-  }
+function ContextProvider({ children, cookies }: { children: ReactNode; cookies: string | null }) {
+  const initialState = cookieToInitialState(wagmiAdapter.wagmiConfig as Config, cookies)
 
   return (
-    <Web3ProvidersContext.Provider 
-      value={{
-        address,
-        setAddress,
-        chain,
-        setChain,
-        getShortAddress,
-      }}
-    >
-      <SupraProvider>
-        <FlowProvider>
-          {children}
-        </FlowProvider>
-      </SupraProvider>
-    </Web3ProvidersContext.Provider>
+    <WagmiProvider config={wagmiAdapter.wagmiConfig as Config} initialState={initialState}>
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    </WagmiProvider>
   );
 }
 
-
-export const useWeb3 = () => {
-  const context = useContext(Web3ProvidersContext);
-  if (!context) {
-    throw new Error('useWeb3 must be used within a Web3Providers');
-  }
-  return context;
-};
+export default ContextProvider;
