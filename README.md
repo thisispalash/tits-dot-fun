@@ -1,7 +1,7 @@
 # tits dot [dot] fun
 > Can you coordinate [read: collude] to draw curves on a chart?
 
-
+<!-- 
 ## Vibe Code Max (easter egg)
 
 Hey, so I am creating a game theoretic experiment on chain with the following mechanisms, I need to implement on Supra using Move and need help,
@@ -32,4 +32,4 @@ I am thinking I need the following modules (correct me if wrong),
 And the following automations,
 
 - liquidator.move :: this one checks the threshold condition every block, and calls lock_pool() if invalidated
-- launcher.move :: this one launches new pools when time is right
+- launcher.move :: this one launches new pools when time is right -->
