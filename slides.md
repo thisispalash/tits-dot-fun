@@ -2,7 +2,7 @@
 > cuz why not?
 
 > [!TIP]
-> Watch concept video:
+> Watch concept video:\
 > [![IMAGE ALT TEXT HERE](https://img.youtube.com/vi/DAtEZnioobo/0.jpg)](https://www.youtube.com/watch?v=DAtEZnioobo)
 
 `tits dot [dot] fun` began with a rather adventurous question, can a trading chart be a new medium 

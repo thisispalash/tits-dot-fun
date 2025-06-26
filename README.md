@@ -1,6 +1,8 @@
 # tits dot [dot] fun
 > Can you coordinate [read: collude] to draw curves on a chart?
 
+See the [game mechanics](https://github.com/thisispalash/tits-dot-fun/discussions/2) overview.
+
 <!-- 
 ## Vibe Code Max (easter egg)
 
