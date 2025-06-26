@@ -7,11 +7,11 @@ import { generateUniqueNameFromTimestamp } from '@/util/uniqueName';
 
 
 import WalletButton from '@/component/WalletButton';
-import { ConnectButton } from '@rainbow-me/rainbowkit';
+// import { ConnectButton } from '@rainbow-me/rainbowkit';
 
 export default function Home() {
 
-  const [ name, setName ] = useState(generateUniqueNameFromTimestamp);
+  const [ name ] = useState(generateUniqueNameFromTimestamp);
   // const { getShortAddress } = useWeb3();
 
 

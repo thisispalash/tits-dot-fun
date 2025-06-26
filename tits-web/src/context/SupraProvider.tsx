@@ -1,9 +1,12 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState } from 'react';
-import { HexString, SupraAccount, SupraClient, BCS, TxnBuilderTypes } from 'supra-l1-sdk';
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable react-hooks/exhaustive-deps */
 
-import { useWeb3 } from './Web3Providers';
+import { createContext, useContext, useEffect, useState } from 'react';
+import { SupraAccount, SupraClient, BCS } from 'supra-l1-sdk';
+
+// import { useWeb3 } from './Web3Providers';
 
 interface SupraProviderContextType {
   hasStarkey: boolean;
@@ -26,20 +29,20 @@ export default function SupraProvider({ children }: { children: React.ReactNode 
 
   const [ supraClient, setSupraClient ] = useState<SupraClient | null>(null);
   const [ deployer, setDeployer ] = useState<string | null>(null);
-  
+
   const [ hasStarkey, setHasStarkey ] = useState<boolean>(false);
   const [ starkeyProvider, setStarkeyProvider ] = useState<any | null>(null);
   const [ account, setAccount ] = useState<SupraAccount | null>(null);
 
-  const { address, setAddress, setChain } = useWeb3();
+  // const { address, setAddress, setChain } = useWeb3();
 
   const initializeNewAccount = async () => {
-    let _client = await SupraClient.init(
+    const _client = await SupraClient.init(
       'https://rpc-testnet.supra.com/'
     );
-    let _account = new SupraAccount();
+    const _account = new SupraAccount();
     await fundAccount(_account);
-    setAddress(_account.address().toString());
+    // setAddress(_account.address().toString());
     setAccount(_account);
     setSupraClient(_client);
   }
@@ -52,17 +55,17 @@ export default function SupraProvider({ children }: { children: React.ReactNode 
     }
     const acc = await _provider.account();
     if (acc.length > 0) {
-      setAddress(acc[0]);
+      // setAddress(acc[0]);
     } else {
-      setAddress(null);
+      // setAddress(null);
     }
 
     // setup hooks
     _provider.on('accountsChanged', (accounts: string[]) => {
       if (accounts.length > 0) {
-        setAddress(accounts[0]);
+        // setAddress(accounts[0]);
       } else {
-        setAddress(null);
+        // setAddress(null);
       }
     });
 
@@ -73,7 +76,7 @@ export default function SupraProvider({ children }: { children: React.ReactNode 
     });
 
     _provider.on('disconnect', () => {
-      setAddress(null);
+      // setAddress(null);
     });
   }
 
@@ -94,15 +97,15 @@ export default function SupraProvider({ children }: { children: React.ReactNode 
   }
 
   const getPoolTokenBalance = async () => {
-    if (!address) return 0;
+    // if (!address) return 0;
     const f = hasStarkey? starkeyProvider.getAccountCoinBalance : supraClient!.getAccountCoinBalance;
-    return await f(address, 'PoolToken');
+    return await f(account!.address(), 'PoolToken');
   }
 
   const getSupraBalance = async () => {
-    if (!address) return 0;
+    // if (!address) return 0;
     const f = hasStarkey? starkeyProvider.getAccountSupraCoinBalance : supraClient!.getAccountSupraCoinBalance;
-    return await f(address);
+    return await f(account!.address());
   }
 
   const connect = async () => {
@@ -110,9 +113,9 @@ export default function SupraProvider({ children }: { children: React.ReactNode 
       await starkeyProvider.connect();
       const acc = await starkeyProvider.account();
       if (acc.length > 0) {
-        setAddress(acc[0]);
+        // setAddress(acc[0]);
       } else {
-        setAddress(null);
+        // setAddress(null);
       }
     } else {
       await initializeNewAccount();
@@ -120,7 +123,7 @@ export default function SupraProvider({ children }: { children: React.ReactNode 
   }
 
   useEffect(() => {
-    setChain('supra');
+    // setChain('supra');
 
     const _provider = typeof window !== "undefined" && (window as any)?.starkey?.supra;
     const _deployer = process.env.NEXT_PUBLIC_SUPRA_TITS_DEPLOYER;
@@ -133,7 +136,7 @@ export default function SupraProvider({ children }: { children: React.ReactNode 
     } else {
       initializeNewAccount();
     }
-  }, []);
+  });
 
   const trade = async (
     qty: number, 
@@ -161,6 +164,8 @@ export default function SupraProvider({ children }: { children: React.ReactNode 
         BCS.bcsSerializeUint64(Number(candle_size)),
       ]
     );
+
+    console.log(rawTx);
   }
 
   return (

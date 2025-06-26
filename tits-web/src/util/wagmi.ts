@@ -1,4 +1,4 @@
-import { cookieStorage, createStorage } from '@wagmi/core'
+import { cookieStorage, createStorage } from 'wagmi'
 import { WagmiAdapter } from '@reown/appkit-adapter-wagmi'
 import type { AppKitNetwork } from '@reown/appkit/networks';
 import { flowTestnet } from 'wagmi/chains'

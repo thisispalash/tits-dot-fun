@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 import cn from '@/util/cn';
 
-import { useSupra } from '@/context/SupraProvider';
-import { useWeb3 } from '@/context/Web3Providers';
+// import { useSupra } from '@/context/SupraProvider';
+// import { useWeb3 } from '@/context/Web3Providers';
 
 import BaseModal from './base';
 
@@ -14,62 +14,48 @@ interface WalletModalProps {
   onClose: () => void;
 }
 
-function SupraBody() {
+// function SupraBody() {
   
-  const { hasStarkey, getPoolTokenBalance, getSupraBalance, connect } = useSupra();
-  const { address } = useWeb3();
+// //   const { hasStarkey, getPoolTokenBalance, getSupraBalance, connect } = useSupra();
+// //   const { address } = useWeb3();
 
-  if (!hasStarkey) {
-    return (
-      <div className={cn(
-        'flex flex-col gap-4',
-      )}>
-        <div className={cn(
-          'flex flex-row gap-2'
-        )}>
-          <span className="">Address:</span>
-        </div>
-      </div>
-    )
-  }
+//   return <></>;
 
-  return <></>;
+// }
 
-}
+// function FlowBody() {
 
-function FlowBody() {
+//   return (
+//     <div className={cn(
+//       'flex flex-col gap-4',
+//     )}>
 
-  return (
-    <div className={cn(
-      'flex flex-col gap-4',
-    )}>
-
-    </div>
-  );
-}
+//     </div>
+//   );
+// }
 
 export default function WalletModal({ isOpen, onClose }: WalletModalProps) {
 
-  const [ title, setTitle ] = useState('');
+  const [ title ] = useState('');
 
-  const { getShortAddress, chain } = useWeb3();
+  // const { chain } = useWeb3();
 
-  useEffect(() => {
+  // useEffect(() => {
 
-    if (chain === 'flow') {
-      setTitle('Go with the Flow?');
-    } else if (chain === 'supra') {
-      setTitle('Paper Trading on Supra');
-    }
+  //   if (chain === 'flow') {
+  //     setTitle('Go with the Flow?');
+  //   } else if (chain === 'supra') {
+  //     setTitle('Paper Trading on Supra');
+  //   }
 
-  }, [])
+  // }, [])
 
   return (
     <BaseModal isOpen={isOpen} onClose={onClose} title={title}>
       <div className={cn(
         'flex flex-col gap-4',
       )}>
-
+{/* 
         {
           {
             'flow': <FlowBody />,
@@ -77,7 +63,7 @@ export default function WalletModal({ isOpen, onClose }: WalletModalProps) {
           }[chain!] || <SupraBody />
         }
 
-
+*/}
 
       </div>
     </BaseModal>
