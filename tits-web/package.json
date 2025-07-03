@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@radix-ui/react-tooltip": "^1.2.7",
     "@rainbow-me/rainbowkit": "^2.2.8",
     "@reown/appkit": "^1.7.10",
     "@reown/appkit-adapter-wagmi": "^1.7.10",
