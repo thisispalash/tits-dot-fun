@@ -1,9 +1,11 @@
 'use client';
 
 import { createContext, useContext } from 'react';
+import { useState, useEffect } from 'react';
 
 interface AppProviderContextType {
-  getChart: () => React.ReactNode;
+  tradeData: any;
+  setPoolNetwork: (network: string) => void;
 }
 
 const AppProviderContext = createContext<AppProviderContextType | null>(null);
@@ -11,14 +13,22 @@ const AppProviderContext = createContext<AppProviderContextType | null>(null);
 
 export default function AppProvider({ children }: { children: React.ReactNode }) {
 
-  const getChart = () => {
-    return <div>Chart</div>;
-  };
+  const [ tradeData, setTradeData ] = useState<any>(null);
+  const [ poolNetwork, setPoolNetwork ] = useState<string>('simulate');
+
+  const getTradeData = async () => {
+  }
+
+  useEffect(() => {
+    getTradeData();
+  }, [poolNetwork]);
+
 
   return (
     <AppProviderContext.Provider 
       value={{
-        getChart,
+        tradeData,
+        setPoolNetwork,
       }}
     >
       {children}

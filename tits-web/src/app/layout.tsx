@@ -5,7 +5,6 @@ import './globals.css';
 import cn from '@/util/cn';
 
 import AppProvider from '@/context/AppProvider';
-import Web3Providers from '@/context/Web3Providers';
 
 const sourGummy = Sour_Gummy({
   variable: '--font-default',
@@ -27,16 +26,16 @@ export default function RootLayout({
       <body
         className={cn(
           sourGummy.variable,
-          'container mx-auto p-4',
+          'w-2/3 lg:w-1/2 mx-auto',
+          'h-screen min-h-screen',
+          'items-center justify-center',
           'bg-background text-foreground',
           'antialiased font-default',
         )}
       >
-        <Web3Providers cookies={null}>
-          <AppProvider>
-            {children}
-          </AppProvider>
-        </Web3Providers>
+        <AppProvider>
+          {children}
+        </AppProvider>
       </body>
     </html>
   );
