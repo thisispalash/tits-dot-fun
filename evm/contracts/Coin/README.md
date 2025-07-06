@@ -1,8 +1,45 @@
 # Coin Contracts
+> The contracts in this folder deal with Zora Coins
 
-The contracts in this folder are related to Zora's Coins.
+The core idea here is that for every completed (ie, time limit exceeded or locked) pool on any 
+chain, there should be a new Coin created representing that pool for the creator of the pool (ie, 
+the one who defined the game and curve options). In practice, that looks like the winner of 
+$\text{pool}_i$ gets to Coin $\text{pool}_{i+1}$.
+
+> [!NOTE]
+> The project began as an exploration of the question, _can the trading charts be considered a new 
+> medium of expression?_ \
+> Coins and Zora is an effort to cement that lore. 
+
+## Coin Parameters
+
+| param | value | reason |
+| :---: | :---: | --- |
+| name | `TT {pool_id} on {network}` | Pool is network specific |
+| symbol | `TT{coin_id}` | Uniqueness within a collection (ie, `"TT"`) across all networks |
+| uri | `https://titsdot.fun/g/{network}/{pool_id}.json` | Control over metadata; removing `.json` provides interactive experience |
+| poolConfig |  | | 
+| platformReferrer | `address({TTCoiner-Proxy})` | Another revenue stream? |
 
 
+## Extensions
+
+One extension to this architecture might be creating Smart Wallets for all users of the protocol. 
+This way, all the tokens remain on Base and are easier to manage. This also would help create a 
+vibrant community on Base itself, especially since the protocol is intended to be deployed on any 
+chain, not just evm specific!
+
+Another extension to this architecture would be to support / integrate message passing between 
+chains. This would make it so that a pool completion on any chain triggers a Coin creation. One 
+cheap and easy way this can manifest is through the runner script, where it is technically 
+automatic (so better than current), but still off chain.
+
+Finally, fun things may be possible with a change in the `poolConfig` and any hooks. If we step 
+back for a minute, the core reason for using Coins is to provide incentive to the players to win, 
+as if they win, they get to define the next curve, and then earn on some secondary market (ie, 
+Zora). Keeping this in mind, I think cool things are possible with tokenomics, especially as we get
+into app chain territory with a protocol token. But, more on this later, since this likely requires
+a bunch more research before any implementation!
 
 ## Deployment Info
 > Script :: [`deployCoiner.ts`](../../scripts/deployCoiner.ts)
