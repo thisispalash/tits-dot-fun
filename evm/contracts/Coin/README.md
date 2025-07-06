@@ -4,7 +4,7 @@
 The core idea here is that for every completed (ie, time limit exceeded or locked) pool on any 
 chain, there should be a new Coin created representing that pool for the creator of the pool (ie, 
 the one who defined the game and curve options). In practice, that looks like the winner of 
-$\text{pool}_i$ gets to Coin $\text{pool}_{i+1}$.
+$`\text{pool}_i`$ gets to Coin $`\text{pool}_{i+1}`$.
 
 > [!NOTE]
 > The project began as an exploration of the question, _can the trading charts be considered a new 
