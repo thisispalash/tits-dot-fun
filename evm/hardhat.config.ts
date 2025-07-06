@@ -27,11 +27,7 @@ const config: HardhatUserConfig = {
     },
   },
   etherscan: {
-    apiKey: {
-      // Is not required by blockscout. Can be any non-empty string
-      'flow': "abc",
-      'flowTestnet': "abc"
-    }, 
+    apiKey: process.env.ETHERSCAN_API_KEY as string,
     customChains: [
       {
         network: 'flow',

@@ -72,6 +72,7 @@ contract TTCoiner is
     bytes public defaultPoolConfig;         // Default pool configuration
     uint256 public nextCoinId;              // Global coin ID counter
     uint256 public nextNetworkId;           // Network ID counter
+    string public VERSION;
     
     // Network management
     mapping(uint256 => NetworkInfo) public networks;
@@ -137,6 +138,7 @@ contract TTCoiner is
         defaultPoolConfig = _defaultPoolConfig;
         nextCoinId = 1;
         nextNetworkId = 1;
+        VERSION = "0.1.0";
 
         // Grant roles to admin
         _grantRole(DEFAULT_ADMIN_ROLE, _admin);
