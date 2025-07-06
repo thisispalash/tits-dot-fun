@@ -122,8 +122,8 @@ contract TTCoiner is
      */
     function initialize(
         address _zoraFactory,
-        bytes memory _defaultPoolConfig,
-        address _admin
+        address _admin,
+        bytes memory _defaultPoolConfig
     ) public initializer {
         if (_zoraFactory == address(0)) revert InvalidZoraFactory();
         if (_admin == address(0)) revert InvalidPayoutRecipient();
@@ -138,7 +138,7 @@ contract TTCoiner is
         defaultPoolConfig = _defaultPoolConfig;
         nextCoinId = 1;
         nextNetworkId = 1;
-        VERSION = "0.1.0";
+        VERSION = "1.0.0";
 
         // Grant roles to admin
         _grantRole(DEFAULT_ADMIN_ROLE, _admin);

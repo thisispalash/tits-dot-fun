@@ -28,8 +28,8 @@ async function main() {
     TTCoiner,
     [
       ZORA_FACTORY_ADDRESS,
-      DEFAULT_POOL_CONFIG,
-      ADMIN_ADDRESS
+      ADMIN_ADDRESS,
+      DEFAULT_POOL_CONFIG
     ],
     {
       initializer: "initialize",

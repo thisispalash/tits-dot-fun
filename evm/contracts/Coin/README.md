@@ -44,29 +44,28 @@ a bunch more research before any implementation!
 ## Deployment Info
 > Script :: [`deployCoiner.ts`](../../scripts/deployCoiner.ts)
 
-Proxy :: [`0xA5bABC23787f4B3cf14c5c4f541338b5c047b8a6`](https://sepolia.basescan.org/address/0xa5babc23787f4b3cf14c5c4f541338b5c047b8a6) \
-Impl :: [`0x91Ec1e7f6E87ae1Dd1d36918425Fd6A57e2C79A7`](https://sepolia.basescan.org/address/0x91ec1e7f6e87ae1dd1d36918425fd6a57e2c79a7)
+Proxy :: [`0xBce325F0C8EB0DF87178Ac0594eBefE3a98D10f3`](https://sepolia.basescan.org/address/0xBce325F0C8EB0DF87178Ac0594eBefE3a98D10f3) \
+Impl :: [`0xe0Af9766439F47D85870707022d456F6AF3a7Ef0`](https://sepolia.basescan.org/address/0xe0Af9766439F47D85870707022d456F6AF3a7Ef0)
 
 CMD Output ~
 ```sh
-➞  npx hardhat run scripts/deployCoiner.ts --network baseSepolia
-Compiled 1 Solidity file successfully (evm target: paris).
+➞  npx hardhat run scripts/deployCoiner.ts --network baseSepolia                                                                                                                                                                                    [git:3-zora] ✖  
 Deploying TTCoiner contract...
 Deploying with account: 0x96e03e38aD4B5EF728f4C5F305eddBB509B652d0
-Account balance: 15687417517091414961
-Pool config length: 2
-Pool config: 0x
+Account balance: 15687406689676217554
+Pool config length: 898
+Pool config: 0x0000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000c00000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000014000000000000000000000000000000000000000000000000000000000000001800000000000000000000000000000000000000000000000000000000000000001fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc2f700000000000000000000000000000000000000000000000000000000000000001fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffd06480000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000b000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000b1a2bc2ec50000
 Deploying TTCoiner proxy...
-TTCoiner proxy deployed to: 0xA5bABC23787f4B3cf14c5c4f541338b5c047b8a6
+TTCoiner proxy deployed to: 0xBce325F0C8EB0DF87178Ac0594eBefE3a98D10f3
 Waiting for deployment to be fully confirmed...
-Implementation deployed to: 0x91Ec1e7f6E87ae1Dd1d36918425Fd6A57e2C79A7
+Implementation deployed to: 0xe0Af9766439F47D85870707022d456F6AF3a7Ef0
 
 Verifying initialization...
 ZoraFactory address: 0x777777751622c0d3258f214F9DF38E35BF45baF3
 Next coin ID: 1n
 Next network ID: 1n
-Default platform referrer: 0xA5bABC23787f4B3cf14c5c4f541338b5c047b8a6
-VERSION: 0.1.0
+Default platform referrer: 0xBce325F0C8EB0DF87178Ac0594eBefE3a98D10f3
+VERSION: 1.0.0
 
 Role assignments:
 Has DEFAULT_ADMIN_ROLE: true
@@ -78,33 +77,33 @@ Has NETWORK_MANAGER_ROLE: true
 Initialization verified successfully!
 
 Verifying contracts on Etherscan...
-Verifying implementation: 0x91Ec1e7f6E87ae1Dd1d36918425Fd6A57e2C79A7
+Verifying implementation: 0xe0Af9766439F47D85870707022d456F6AF3a7Ef0
 Successfully submitted source code for contract
-contracts/Coin/TTCoiner.sol:TTCoiner at 0x91Ec1e7f6E87ae1Dd1d36918425Fd6A57e2C79A7
+contracts/Coin/TTCoiner.sol:TTCoiner at 0xe0Af9766439F47D85870707022d456F6AF3a7Ef0
 for verification on the block explorer. Waiting for verification result...
 
 Successfully verified contract TTCoiner on the block explorer.
-https://sepolia.basescan.org/address/0x91Ec1e7f6E87ae1Dd1d36918425Fd6A57e2C79A7#code
+https://sepolia.basescan.org/address/0xe0Af9766439F47D85870707022d456F6AF3a7Ef0#code
 
-Verifying proxy: 0xA5bABC23787f4B3cf14c5c4f541338b5c047b8a6
-Failed to verify ERC1967Proxy contract at 0xA5bABC23787f4B3cf14c5c4f541338b5c047b8a6: Already Verified
-Linking proxy 0xA5bABC23787f4B3cf14c5c4f541338b5c047b8a6 with implementation
+Verifying proxy: 0xBce325F0C8EB0DF87178Ac0594eBefE3a98D10f3
+Failed to verify ERC1967Proxy contract at 0xBce325F0C8EB0DF87178Ac0594eBefE3a98D10f3: Already Verified
+Linking proxy 0xBce325F0C8EB0DF87178Ac0594eBefE3a98D10f3 with implementation
 Successfully linked proxy to implementation.
 Verification failed or contracts already verified: 
 Verification completed with the following errors.
 
-Error 1: Failed to verify ERC1967Proxy contract at 0xA5bABC23787f4B3cf14c5c4f541338b5c047b8a6: Already Verified
+Error 1: Failed to verify ERC1967Proxy contract at 0xBce325F0C8EB0DF87178Ac0594eBefE3a98D10f3: Already Verified
 
 
 
 Deployment Info: {
-  "contractAddress": "0xA5bABC23787f4B3cf14c5c4f541338b5c047b8a6",
-  "implementationAddress": "0x91Ec1e7f6E87ae1Dd1d36918425Fd6A57e2C79A7",
+  "contractAddress": "0xBce325F0C8EB0DF87178Ac0594eBefE3a98D10f3",
+  "implementationAddress": "0xe0Af9766439F47D85870707022d456F6AF3a7Ef0",
   "proxyType": "UUPS",
   "deployer": "0x96e03e38aD4B5EF728f4C5F305eddBB509B652d0",
   "zoraFactory": "0x777777751622c0d3258f214F9DF38E35BF45baF3",
   "network": "baseSepolia",
-  "blockNumber": 28012151,
-  "timestamp": "2025-07-06T09:03:12.503Z"
+  "blockNumber": 28035454,
+  "timestamp": "2025-07-06T21:59:58.018Z"
 }
 ```
