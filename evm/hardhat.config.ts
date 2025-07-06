@@ -3,6 +3,7 @@ import "@nomicfoundation/hardhat-toolbox-viem";
 require('@openzeppelin/hardhat-upgrades');
 require('dotenv').config();
 import "@nomicfoundation/hardhat-ethers";
+require('@openzeppelin/hardhat-upgrades');
 
 const config: HardhatUserConfig = {
   solidity: {
@@ -17,7 +18,11 @@ const config: HardhatUserConfig = {
   },
   networks: {
     flowTestnet: {
-      url: 'https://testnet.evm.nodes.onflow.org',
+      url: `https://flow-testnet.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}`,
+      accounts: [process.env.DEPLOY_WALLET_1 as string],
+    },
+    baseSepolia: {
+      url: `https://base-sepolia.g.alchemy.com/v2/${process.env.ALCHEMY_API_KEY}`,
       accounts: [process.env.DEPLOY_WALLET_1 as string],
     },
   },
