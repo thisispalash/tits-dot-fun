@@ -1,36 +1,23 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# tits dot [dot] fun
+> The web interface, no mobile
 
-## Getting Started
+## Routes
 
-First, run the development server:
+<!-- on complete -> :ballot_box_with_check: -->
+| Completed | Route | What it is |
+| :---: | :---: | --- |
+| :black_square_button: | [`/`](https://titsdot.fun/) | Landing Page |
+| :black_square_button: | [`/g`](https://titsdot.fun/g) | Lander for all daily games |
+| :black_square_button: | `/g/[network]` | Daily pool for `[network]` |
+| :black_square_button: | `/g/network/[pool_id]` | Historic action in `[pool_id]` on `[network]` |
+| :black_square_button: | [`/art`](https://titsdot.fun/art) | NFT sales |
+| :black_square_button: | [`/secondary`](https://titsdot.fun/secondary) | Zora Coin trading |
+| :black_square_button: | [`/mechanics`](https://titsdot.fun/mechanics) | Mechanics overview, ie, docs |
+| :black_square_button: | [`/pitch`](https://titsdot.fun/pitch) | Pitch for the project, for investors and partners |
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+### Mobile
+> _todo_
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Mobile is tricky since every action within the game is an onchain action. One option is to disable 
+all onchain games but leave the simulator open. Other "Web2" stuff can remain as well, but anything
+onchain will likely be blocked.
