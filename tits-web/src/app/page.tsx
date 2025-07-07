@@ -3,9 +3,6 @@
 import cn from '@/util/cn';
 
 import Header from '@/component/Header';
-import Chart from '@/component/Chart';
-import GameOptions from '@/component/GameOptions';
-import TradeButton from '@/component/TradeButton';
 
 export default function Home() {
 
@@ -20,13 +17,6 @@ export default function Home() {
 
       <Header />
 
-      <Chart />
-
-      <GameOptions />
-
-      <TradeButton />
-
-      {/* <Ticker /> */}
 
 
     </div>
